@@ -31,3 +31,33 @@ fn blast_radius_empty_for_noise_session() {
     let br = blast_radius::analyze(&events("session_noise.jsonl"));
     assert!(br.files.is_empty());
 }
+
+#[test]
+fn git_changes_merge_without_duplicating_tool_writes() {
+    use std::path::PathBuf;
+    let ev = events("session_typical.jsonl"); // wrote src/hello.rs via Write
+    let mut br = blast_radius::analyze(&ev);
+
+    // src/hello.rs came from git too (dedup); scripts/deploy.sh is a shell-only edit.
+    let changed = vec![
+        PathBuf::from("src/hello.rs"),
+        PathBuf::from("scripts/deploy.sh"),
+    ];
+    blast_radius::merge_git_changes(&mut br, &ev, &changed);
+
+    assert_eq!(
+        br.files
+            .iter()
+            .filter(|f| f.path.ends_with("hello.rs"))
+            .count(),
+        1,
+        "the Write and the git change should not double-count"
+    );
+    let shell = br
+        .files
+        .iter()
+        .find(|f| f.path == "scripts/deploy.sh")
+        .unwrap();
+    assert_eq!(shell.tool, "shell/git");
+    assert!(!shell.in_scope, "deploy.sh was never mentioned by the user");
+}

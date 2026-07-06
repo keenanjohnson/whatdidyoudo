@@ -23,9 +23,31 @@ impl Timestamp {
         OffsetDateTime::parse(s, &Rfc3339).ok().map(Timestamp)
     }
 
-    /// RFC 3339 rendering for machine-readable output (`--json`).
+    /// RFC 3339 rendering for machine-readable output (`--json`) and git arguments.
     pub fn to_rfc3339(&self) -> String {
         self.0.format(&Rfc3339).unwrap_or_default()
+    }
+
+    /// Construct from a Unix timestamp (seconds) — used to parse git commit dates.
+    pub fn from_unix(secs: i64) -> Option<Self> {
+        OffsetDateTime::from_unix_timestamp(secs)
+            .ok()
+            .map(Timestamp)
+    }
+}
+
+/// Earliest timestamp in a timeline — the session's start, for git windowing.
+pub fn session_start(events: &[Event]) -> Option<Timestamp> {
+    events.iter().filter_map(event_ts).min()
+}
+
+fn event_ts(event: &Event) -> Option<Timestamp> {
+    match event {
+        Event::UserMessage { ts, .. }
+        | Event::AssistantText { ts, .. }
+        | Event::ToolCall { ts, .. }
+        | Event::ToolResult { ts, .. } => Some(*ts),
+        Event::Unknown { ts, .. } => *ts,
     }
 }
 

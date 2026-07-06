@@ -10,14 +10,14 @@
 - [x] Discovery: cwd → encoded project dir → latest session; noise filtering
 - [x] `ClaudeCodeAdapter`: streaming permissive JSONL → `Event` timeline
 - [x] Blast-radius analyzer (scope heuristic) + command analyzer (test/build/other + outcomes); dependency analyzer still TODO
-- [ ] Git evidence provider (diff-stat, commits-since) — also the way to catch Bash/`sed`-based edits the Write/Edit analyzer misses
+- [x] Git evidence provider (commits-since, changed-files-since) — catches Bash/`sed` edits the Write/Edit analyzer misses (`shell/git` rows) and verifies `Committed`
 - [x] Terminal renderer; `--json`
 - [x] `insta` snapshots for every fixture
 - Milestone demo: `cargo install` → `wdyd` in a real project → real blast-radius report in <1s
 
 ## M2 — Claims table (the product, ~weekend two)
-- [x] Claims extractor: `TestsPass`, `BuildSucceeds`, `FileCreated` (+ `BugFixed`, `Committed` extraction TODO)
-- [x] Claims verifier with `Verified` / `Unverified` / `Contradicted` + evidence strings (`Committed` needs git; `BugFixed` unverifiable)
+- [x] Claims extractor: `TestsPass`, `BuildSucceeds`, `FileCreated`, `Committed` (`BugFixed` extraction still TODO)
+- [x] Claims verifier with `Verified` / `Unverified` / `Contradicted` + evidence strings (`Committed` now git-backed; `BugFixed` unverifiable by design)
 - [x] Trust summary + scope-compliance %
 - [x] `--md` renderer (PR-paste-ready), `--check` exit codes
 - [ ] Hygiene analyzer (TODOs, debug prints)

@@ -9,7 +9,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 
 use whatdidyoudo::analyzers::{blast_radius, claims};
-use whatdidyoudo::evidence::FsEvidence;
+use whatdidyoudo::evidence::{Evidence, LocalEvidence};
+use whatdidyoudo::ingestion::session_start;
 use whatdidyoudo::{AuditReport, ClaudeCodeAdapter, Discovery, SessionMeta, SourceAdapter};
 
 /// Ask your coding agent "what did you do?" — and check its answers.
@@ -62,15 +63,22 @@ fn run() -> Result<ExitCode> {
         .with_context(|| format!("opening transcript {}", session_path.display()))?;
     let events: Vec<_> = ClaudeCodeAdapter::parse(BufReader::new(file)).collect();
 
+    let evidence = LocalEvidence::cwd();
     let extracted = claims::extract(&events);
-    let report = AuditReport {
+    let mut report = AuditReport {
         session: SessionMeta {
             path: session_path.display().to_string(),
             events: events.len(),
         },
         blast_radius: blast_radius::analyze(&events),
-        claims: claims::verify(extracted, &events, &FsEvidence),
+        claims: claims::verify(extracted, &events, &evidence),
     };
+
+    // Cross-check the blast radius against git to catch shell/`sed` edits.
+    if let Some(start) = session_start(&events) {
+        let changed = evidence.changed_files_since(start);
+        blast_radius::merge_git_changes(&mut report.blast_radius, &events, &changed);
+    }
 
     match cli.format {
         Format::Terminal => print!("{}", report.to_terminal()),

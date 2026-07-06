@@ -60,6 +60,30 @@ pub fn analyze(events: &[Event]) -> BlastRadius {
     BlastRadius { files }
 }
 
+/// Fold git-derived changes into an existing blast radius: any file changed in the
+/// session's git window that wasn't already captured as a Write/Edit is added and
+/// tagged `shell/git` — these are the edits made via Bash/`sed` (or committed directly).
+pub fn merge_git_changes(br: &mut BlastRadius, events: &[Event], changed: &[std::path::PathBuf]) {
+    let user_text = collect_user_text(events);
+    for path in changed {
+        let path = path.to_string_lossy().to_string();
+        if br.files.iter().any(|f| same_file(&f.path, &path)) {
+            continue;
+        }
+        br.files.push(FileTouch {
+            in_scope: mentioned(&user_text, &path),
+            tool: "shell/git".to_string(),
+            path,
+        });
+    }
+}
+
+/// Loose path match for dedup: equal, or one is a suffix of the other (git paths are
+/// repo-relative; tool paths may be absolute).
+fn same_file(a: &str, b: &str) -> bool {
+    a == b || a.ends_with(b) || b.ends_with(a)
+}
+
 fn write_target(tool: &str, input: &crate::ingestion::ToolInput) -> Option<String> {
     let field = WRITE_TOOLS.iter().find(|(t, _)| *t == tool)?.1;
     input.0.get(field).cloned()

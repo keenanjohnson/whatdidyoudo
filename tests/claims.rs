@@ -4,8 +4,8 @@ use std::io::BufReader;
 use std::path::Path;
 
 use whatdidyoudo::analyzers::{claims, ClaimKind, Verdict};
-use whatdidyoudo::evidence::Evidence;
-use whatdidyoudo::{ClaudeCodeAdapter, Event, SourceAdapter};
+use whatdidyoudo::evidence::{Commit, Evidence};
+use whatdidyoudo::{ClaudeCodeAdapter, Event, SourceAdapter, Timestamp};
 
 fn events(name: &str) -> Vec<Event> {
     let path = format!("{}/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -18,6 +18,31 @@ impl Evidence for FileExists {
     fn file_exists(&self, _: &Path) -> bool {
         self.0
     }
+}
+
+/// Git stub: configurable repo-ness and commit list.
+struct GitStub {
+    repo: bool,
+    commits: Vec<Commit>,
+}
+impl Evidence for GitStub {
+    fn file_exists(&self, _: &Path) -> bool {
+        false
+    }
+    fn is_git_repo(&self) -> bool {
+        self.repo
+    }
+    fn commits_since(&self, _: Timestamp) -> Vec<Commit> {
+        self.commits.clone()
+    }
+}
+
+fn verdict_for(verdicts: &[(claims::Claim, Verdict)], want: &ClaimKind) -> Verdict {
+    verdicts
+        .iter()
+        .find(|(c, _)| &c.kind == want)
+        .map(|(_, v)| v.clone())
+        .expect("claim present")
 }
 
 #[test]
@@ -61,4 +86,56 @@ fn file_creation_verifies_when_the_file_is_on_disk() {
         .find(|(c, _)| matches!(c.kind, ClaimKind::FileCreated(_)))
         .unwrap();
     assert!(matches!(verdict, Verdict::Verified(_)));
+}
+
+#[test]
+fn extracts_a_committed_claim() {
+    let claims = claims::extract(&events("session_committed.jsonl"));
+    assert_eq!(
+        claims.iter().map(|c| &c.kind).collect::<Vec<_>>(),
+        vec![&ClaimKind::Committed]
+    );
+}
+
+#[test]
+fn committed_verifies_contradicts_or_is_unverified_by_git_state() {
+    let ev = events("session_committed.jsonl");
+    let commit = Commit {
+        hash: "a1b2c3d4ef".into(),
+        subject: "wire up the parser".into(),
+        ts: Timestamp::from_unix(1000).unwrap(), // before the claim
+    };
+
+    // repo + a commit in-window → Verified
+    let repo_with_commit = GitStub {
+        repo: true,
+        commits: vec![commit],
+    };
+    let v = claims::verify(claims::extract(&ev), &ev, &repo_with_commit);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::Committed),
+        Verdict::Verified(_)
+    ));
+
+    // repo, no commits → Contradicted (a real catch)
+    let repo_no_commits = GitStub {
+        repo: true,
+        commits: vec![],
+    };
+    let v = claims::verify(claims::extract(&ev), &ev, &repo_no_commits);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::Committed),
+        Verdict::Contradicted(_)
+    ));
+
+    // not a repo → can't say
+    let no_repo = GitStub {
+        repo: false,
+        commits: vec![],
+    };
+    let v = claims::verify(claims::extract(&ev), &ev, &no_repo);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::Committed),
+        Verdict::Unverified(_)
+    ));
 }

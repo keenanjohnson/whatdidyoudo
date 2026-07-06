@@ -58,6 +58,13 @@ pub fn extract(events: &[Event]) -> Vec<Claim> {
                 quote: quote.to_string(),
             });
         }
+        if committed_re().is_match(text) {
+            claims.push(Claim {
+                kind: ClaimKind::Committed,
+                ts: *ts,
+                quote: quote.to_string(),
+            });
+        }
     }
     claims
 }
@@ -84,6 +91,11 @@ fn file_created_re() -> &'static Regex {
     })
 }
 
+fn committed_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)\bcommitted\b").unwrap())
+}
+
 // ============================ Verifier ============================
 // Interrogates evidence dated before each claim. Knows nothing about regexes.
 
@@ -93,6 +105,7 @@ pub fn verify(
     evidence: &dyn Evidence,
 ) -> Vec<(Claim, Verdict)> {
     let runs = commands::analyze(events);
+    let session_start = crate::ingestion::session_start(events);
     claims
         .into_iter()
         .map(|claim| {
@@ -102,16 +115,40 @@ pub fn verify(
                     command_verdict(&runs, CommandKind::Build, claim.ts, "build")
                 }
                 ClaimKind::FileCreated(path) => file_verdict(path, events, claim.ts, evidence),
+                ClaimKind::Committed => committed_verdict(session_start, claim.ts, evidence),
                 ClaimKind::BugFixed => {
                     Verdict::Unverified("no mechanical check for bug fixes in v1".into())
-                }
-                ClaimKind::Committed => {
-                    Verdict::Unverified("git evidence provider not wired yet".into())
                 }
             };
             (claim, verdict)
         })
         .collect()
+}
+
+/// Verdict for a `Committed` claim: a commit in the session window (up to the claim)
+/// confirms it; a repo with none contradicts it; no repo can't say.
+fn committed_verdict(
+    session_start: Option<Timestamp>,
+    claim_ts: Timestamp,
+    evidence: &dyn Evidence,
+) -> Verdict {
+    if !evidence.is_git_repo() {
+        return Verdict::Unverified("not a git repository".into());
+    }
+    let Some(start) = session_start else {
+        return Verdict::Unverified("no session timeline to bound commits".into());
+    };
+    match evidence
+        .commits_since(start)
+        .into_iter()
+        .find(|c| c.ts <= claim_ts)
+    {
+        Some(c) => {
+            let short = &c.hash[..c.hash.len().min(8)];
+            Verdict::Verified(format!("commit {short} \"{}\"", c.subject))
+        }
+        None => Verdict::Contradicted("no commit found in the session window".into()),
+    }
 }
 
 /// Verdict for a `TestsPass` / `BuildSucceeds` claim: the latest matching command that
