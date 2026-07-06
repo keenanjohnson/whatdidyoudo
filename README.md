@@ -8,8 +8,6 @@
   <img src="assets/demo.gif" alt="wdyd auditing a session: 'tests pass' contradicted, build/file/commit verified, an out-of-scope shell edit caught by git" width="820">
 </p>
 
-**No wrapper. No proxy. No config. No network.** Point it at a session that already happened.
-
 ## Why
 
 Coding agents produce completion language regardless of the actual state of the code. They'll write *"tests passing"* while the suite is red, and claim files exist that were never written. The common answers are heavyweight — orchestration platforms, MCP gateways, CI layers — all of which change how you run your agent *before* they deliver any value.
