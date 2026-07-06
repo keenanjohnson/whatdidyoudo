@@ -5,7 +5,7 @@
 `wdyd` is a one-command, after-the-fact audit for AI coding agent sessions. It reads the transcript your agent already wrote to disk, cross-references every claim it made against what it **actually did** — the commands it ran, their exit codes, the files it changed, the commits it made — and prints a one-page trust report.
 
 <p align="center">
-  <img src="assets/report.svg" alt="wdyd report: 'tests pass' contradicted, build/file/commit verified, an out-of-scope shell edit caught by git" width="680">
+  <img src="assets/demo.gif" alt="wdyd auditing a session: 'tests pass' contradicted, build/file/commit verified, an out-of-scope shell edit caught by git" width="820">
 </p>
 
 **No wrapper. No proxy. No config. No network.** Point it at a session that already happened.
