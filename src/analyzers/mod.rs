@@ -21,7 +21,7 @@ pub enum ClaimKind {
 /// Result of verifying a claim against evidence dated before the claim's timestamp.
 #[derive(Debug, Clone)]
 pub enum Verdict {
-    Verified,     // + EvidenceRef in M2
+    Verified, // + EvidenceRef in M2
     Unverified,
     Contradicted, // + EvidenceRef in M2
 }

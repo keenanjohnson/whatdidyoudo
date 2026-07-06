@@ -1,28 +1,30 @@
-//! Fixture regression net: each real transcript in `fixtures/` parses to a stable
-//! `Event` timeline. Format churn shows up here as a failing snapshot, not a user bug.
+//! Fixture regression net: each transcript in `fixtures/` parses to a stable `Event`
+//! timeline. Format churn shows up here as a failing snapshot, not a user bug report.
 //!
-//! NOTE: fixtures are currently raw (un-anonymized) and gitignored; both these and the
-//! generated snapshots must be anonymized before they are committed. See docs/roadmap.md.
+//! Fixtures are hand-written synthetic JSONL that mirror the real Claude Code schema
+//! (see `docs/architecture.md` §2) — no real transcript data is committed.
 
 use std::fs::File;
 use std::io::BufReader;
 
-use whatdidyoudo::{ClaudeCodeAdapter, SourceAdapter};
+use whatdidyoudo::{ClaudeCodeAdapter, Event, SourceAdapter};
 
-fn events_for(name: &str) -> Vec<whatdidyoudo::Event> {
+fn events_for(name: &str) -> Vec<Event> {
     let path = format!("{}/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
     let reader = BufReader::new(File::open(&path).expect("fixture present"));
     ClaudeCodeAdapter::parse(reader).collect()
 }
 
 #[test]
-fn rich_session_timeline() {
-    let events = events_for("rich_bash_edit_session.jsonl");
-    insta::assert_debug_snapshot!(events);
+fn typical_session_timeline() {
+    // Prompt, dropped thinking, text, Write + Bash calls with Ok/Failed outcomes,
+    // a noise line as Unknown, and a final claim.
+    insta::assert_debug_snapshot!(events_for("session_typical.jsonl"));
 }
 
 #[test]
 fn noise_session_timeline() {
-    let events = events_for("noise_local_command.jsonl");
-    insta::assert_debug_snapshot!(events);
+    // No tool calls — only meta/command messages. Discovery will later classify this
+    // as a noise session; ingestion still emits it faithfully.
+    insta::assert_debug_snapshot!(events_for("session_noise.jsonl"));
 }

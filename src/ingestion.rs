@@ -48,11 +48,30 @@ pub enum ToolOutcome {
 /// never dropped, never a panic.
 #[derive(Debug, Clone)]
 pub enum Event {
-    UserMessage { ts: Timestamp, text: String },
-    AssistantText { ts: Timestamp, text: String },
-    ToolCall { ts: Timestamp, id: CallId, tool: String, input: ToolInput },
-    ToolResult { ts: Timestamp, call_id: CallId, outcome: ToolOutcome, output: String },
-    Unknown { ts: Option<Timestamp>, raw: serde_json::Value },
+    UserMessage {
+        ts: Timestamp,
+        text: String,
+    },
+    AssistantText {
+        ts: Timestamp,
+        text: String,
+    },
+    ToolCall {
+        ts: Timestamp,
+        id: CallId,
+        tool: String,
+        input: ToolInput,
+    },
+    ToolResult {
+        ts: Timestamp,
+        call_id: CallId,
+        outcome: ToolOutcome,
+        output: String,
+    },
+    Unknown {
+        ts: Option<Timestamp>,
+        raw: serde_json::Value,
+    },
 }
 
 /// A source of agent transcripts. `ClaudeCodeAdapter` first; Codex/Cursor later,
@@ -104,10 +123,7 @@ fn line_to_events(value: serde_json::Value) -> Vec<Event> {
         .and_then(serde_json::Value::as_str)
         .and_then(Timestamp::parse);
 
-    let content = value
-        .get("message")
-        .and_then(|m| m.get("content"))
-        .cloned();
+    let content = value.get("message").and_then(|m| m.get("content")).cloned();
 
     // Only lines with a timestamp AND message content sit on the timeline; the rest
     // (system / mode / ai-title / …) are preserved as Unknown, not invented onto the spine.

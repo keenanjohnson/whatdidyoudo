@@ -1,6 +1,2 @@
 /target
 Cargo.lock.orig
-
-# raw transcripts — anonymize before committing
-/fixtures
-/tests/snapshots

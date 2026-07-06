@@ -1,0 +1,5 @@
+{"type":"mode","sessionId":"synthetic-noise","mode":"default"}
+{"type":"user","timestamp":"2026-07-01T09:00:00.000Z","sessionId":"synthetic-noise","isMeta":true,"message":{"role":"user","content":"<local-command-caveat>Caveat: messages below were generated while running local commands.</local-command-caveat>"}}
+{"type":"user","timestamp":"2026-07-01T09:00:01.000Z","sessionId":"synthetic-noise","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"system","timestamp":"2026-07-01T09:00:02.000Z","sessionId":"synthetic-noise","subtype":"local_command","level":"info","content":"Conversation cleared"}
+{"type":"last-prompt","sessionId":"synthetic-noise","leafUuid":"synthetic-noise-leaf"}

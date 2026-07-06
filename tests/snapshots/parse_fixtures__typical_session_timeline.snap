@@ -1,0 +1,114 @@
+---
+source: tests/parse_fixtures.rs
+expression: "events_for(\"session_typical.jsonl\")"
+---
+[
+    UserMessage {
+        ts: Timestamp(
+            2026-07-01 10:00:00.0 +00:00:00,
+        ),
+        text: "Add a greet() function in src/hello.rs and make the tests pass.",
+    },
+    AssistantText {
+        ts: Timestamp(
+            2026-07-01 10:00:02.0 +00:00:00,
+        ),
+        text: "I'll add the greet function and run the tests.",
+    },
+    ToolCall {
+        ts: Timestamp(
+            2026-07-01 10:00:03.0 +00:00:00,
+        ),
+        id: CallId(
+            "toolu_write1",
+        ),
+        tool: "Write",
+        input: ToolInput(
+            {
+                "content": "pub fn greet() -> &'static str { \"hi\" }",
+                "file_path": "src/hello.rs",
+            },
+        ),
+    },
+    ToolResult {
+        ts: Timestamp(
+            2026-07-01 10:00:04.0 +00:00:00,
+        ),
+        call_id: CallId(
+            "toolu_write1",
+        ),
+        outcome: Ok,
+        output: "File created successfully at: src/hello.rs",
+    },
+    Unknown {
+        ts: Some(
+            Timestamp(
+                2026-07-01 10:00:04.5 +00:00:00,
+            ),
+        ),
+        raw: Object {
+            "messageId": String("m1"),
+            "snapshot": Object {
+                "trackedFileBackups": Object {},
+            },
+            "timestamp": String("2026-07-01T10:00:04.500Z"),
+            "type": String("file-history-snapshot"),
+        },
+    },
+    ToolCall {
+        ts: Timestamp(
+            2026-07-01 10:00:05.0 +00:00:00,
+        ),
+        id: CallId(
+            "toolu_bash1",
+        ),
+        tool: "Bash",
+        input: ToolInput(
+            {
+                "command": "cargo test",
+                "description": "Run the test suite",
+            },
+        ),
+    },
+    ToolResult {
+        ts: Timestamp(
+            2026-07-01 10:00:06.0 +00:00:00,
+        ),
+        call_id: CallId(
+            "toolu_bash1",
+        ),
+        outcome: Ok,
+        output: "running 1 test\ntest tests::greets ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored",
+    },
+    ToolCall {
+        ts: Timestamp(
+            2026-07-01 10:00:07.0 +00:00:00,
+        ),
+        id: CallId(
+            "toolu_bash2",
+        ),
+        tool: "Bash",
+        input: ToolInput(
+            {
+                "command": "cargo build --release",
+                "description": "Build the release binary",
+            },
+        ),
+    },
+    ToolResult {
+        ts: Timestamp(
+            2026-07-01 10:00:08.0 +00:00:00,
+        ),
+        call_id: CallId(
+            "toolu_bash2",
+        ),
+        outcome: Failed,
+        output: "error[E0433]: failed to resolve\nerror: could not compile `repo`",
+    },
+    AssistantText {
+        ts: Timestamp(
+            2026-07-01 10:00:09.0 +00:00:00,
+        ),
+        text: "Done. I created src/hello.rs and the tests pass.",
+    },
+]

@@ -1,0 +1,49 @@
+---
+source: tests/parse_fixtures.rs
+expression: "events_for(\"session_noise.jsonl\")"
+---
+[
+    Unknown {
+        ts: None,
+        raw: Object {
+            "mode": String("default"),
+            "sessionId": String("synthetic-noise"),
+            "type": String("mode"),
+        },
+    },
+    UserMessage {
+        ts: Timestamp(
+            2026-07-01 9:00:00.0 +00:00:00,
+        ),
+        text: "<local-command-caveat>Caveat: messages below were generated while running local commands.</local-command-caveat>",
+    },
+    UserMessage {
+        ts: Timestamp(
+            2026-07-01 9:00:01.0 +00:00:00,
+        ),
+        text: "<command-name>/clear</command-name>",
+    },
+    Unknown {
+        ts: Some(
+            Timestamp(
+                2026-07-01 9:00:02.0 +00:00:00,
+            ),
+        ),
+        raw: Object {
+            "content": String("Conversation cleared"),
+            "level": String("info"),
+            "sessionId": String("synthetic-noise"),
+            "subtype": String("local_command"),
+            "timestamp": String("2026-07-01T09:00:02.000Z"),
+            "type": String("system"),
+        },
+    },
+    Unknown {
+        ts: None,
+        raw: Object {
+            "leafUuid": String("synthetic-noise-leaf"),
+            "sessionId": String("synthetic-noise"),
+            "type": String("last-prompt"),
+        },
+    },
+]
