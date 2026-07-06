@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="650" height="554" viewBox="0 0 650 554" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+  <rect x="0.5" y="0.5" width="649" height="553" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <circle cx="20" cy="22" r="6" fill="#ff5f56"/>
+  <circle cx="40" cy="22" r="6" fill="#ffbd2e"/>
+  <circle cx="60" cy="22" r="6" fill="#27c93f"/>
+  <text x="325.0" y="26" fill="#6e7681" text-anchor="middle" font-size="12">wdyd — session audit</text>
+  <g xml:space="preserve" fill="#adbac7">
+    <text x="20" y="59" fill="#e6edf3" font-weight="700">what did you do?</text>
+    <text x="20" y="78" fill="#6e7681">session ~/.claude/projects/auth-service/a1b2c3d4.jsonl · 12 events</text>
+    <text x="20" y="116" fill="#e6edf3" font-weight="700">Claims</text>
+    <text x="20" y="135" fill="#30363d">+---------------------+--------------+---------------------------------------+</text>
+    <text x="20" y="154"><tspan fill="#adbac7">| Claim               | Verdict      | Evidence                              |</tspan></text>
+    <text x="20" y="173" fill="#30363d">+============================================================================+</text>
+    <text x="20" y="192"><tspan fill="#adbac7">| tests pass          | </tspan><tspan fill="#f85149" font-weight="700">CONTRADICTED</tspan><tspan fill="#adbac7"> | `cargo test` failed                   |</tspan></text>
+    <text x="20" y="211"><tspan fill="#adbac7">|---------------------+--------------+---------------------------------------|</tspan></text>
+    <text x="20" y="230"><tspan fill="#adbac7">| build succeeds      | </tspan><tspan fill="#3fb950" font-weight="700">VERIFIED</tspan><tspan fill="#adbac7">     | `cargo build` exited ok               |</tspan></text>
+    <text x="20" y="249"><tspan fill="#adbac7">|---------------------+--------------+---------------------------------------|</tspan></text>
+    <text x="20" y="268"><tspan fill="#adbac7">| created src/auth.rs | </tspan><tspan fill="#3fb950" font-weight="700">VERIFIED</tspan><tspan fill="#adbac7">     | written this session, present on disk |</tspan></text>
+    <text x="20" y="287"><tspan fill="#adbac7">|---------------------+--------------+---------------------------------------|</tspan></text>
+    <text x="20" y="306"><tspan fill="#adbac7">| committed           | </tspan><tspan fill="#3fb950" font-weight="700">VERIFIED</tspan><tspan fill="#adbac7">     | commit 465f0b8a &quot;add auth middleware&quot; |</tspan></text>
+    <text x="20" y="325" fill="#30363d">+---------------------+--------------+---------------------------------------+</text>
+    <text x="20" y="363" fill="#e6edf3" font-weight="700">Blast radius</text>
+    <text x="20" y="382" fill="#30363d">+------------------------+-----------+--------------+</text>
+    <text x="20" y="401"><tspan fill="#adbac7">| File                   | Tool      | Scope        |</tspan></text>
+    <text x="20" y="420" fill="#30363d">+===================================================+</text>
+    <text x="20" y="439"><tspan fill="#adbac7">| src/auth.rs            | Write     | </tspan><tspan fill="#3fb950" font-weight="700">in scope</tspan><tspan fill="#adbac7">     |</tspan></text>
+    <text x="20" y="458"><tspan fill="#adbac7">|------------------------+-----------+--------------|</tspan></text>
+    <text x="20" y="477"><tspan fill="#adbac7">| src/billing/invoice.rs | shell/git | </tspan><tspan fill="#f85149" font-weight="700">OUT OF SCOPE</tspan><tspan fill="#adbac7"> |</tspan></text>
+    <text x="20" y="496" fill="#30363d">+------------------------+-----------+--------------+</text>
+    <text x="20" y="534" fill="#f85149" font-weight="700">3 verified · 0 unverified · 1 contradicted · scope 50%</text>
+  </g>
+</svg>

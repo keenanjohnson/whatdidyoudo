@@ -21,10 +21,10 @@
 - [x] Trust summary + scope-compliance %
 - [x] `--md` renderer (PR-paste-ready), `--check` exit codes
 - [ ] Hygiene analyzer (TODOs, debug prints)
-- [ ] README with real screenshot + 30-second demo GIF at top
+- [x] README with real report hero (SVG of genuine `wdyd` output); 30s demo GIF still optional
 
 ## M3 — Launch
-- [ ] `cargo-dist`: prebuilt binaries, install script, Homebrew tap
+- [x] `cargo-dist`: prebuilt binaries (5 platforms), shell install script, Homebrew formula — needs the `homebrew-tap` repo created + a tap-push token secret before the first release tag
 - [ ] `--last N`, `--since` (session-selection flags) — `--session <file>` already done
 - [ ] README recipes: pre-commit hook, CI, Claude Code Stop hook
 - [ ] Launch posts (see below)

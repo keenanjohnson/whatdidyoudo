@@ -5,6 +5,7 @@ edition = "2021"
 description = "Audit completed AI coding agent sessions: cross-check the agent's claims against what it actually did."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/keenanjohnson/whatdidyoudo"
+homepage = "https://github.com/keenanjohnson/whatdidyoudo"
 readme = "README.md"
 keywords = ["ai", "agent", "audit", "claude", "cli"]
 categories = ["command-line-utilities", "development-tools"]
@@ -31,3 +32,8 @@ walkdir = "2"
 
 [dev-dependencies]
 insta = { version = "1", features = ["json"] }
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

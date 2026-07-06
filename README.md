@@ -1,74 +1,80 @@
 # whatdidyoudo
 
-> Your agent says "Done! All tests pass." Did they?
+> Your agent says *"Done! All tests pass."* Did it?
 
-`wdyd` is a one-command, after-the-fact audit for AI coding agent sessions. It reads the session transcript your agent already wrote to disk, cross-references every claim the agent made against what it actually did, and prints a one-page trust report.
+`wdyd` is a one-command, after-the-fact audit for AI coding agent sessions. It reads the transcript your agent already wrote to disk, cross-references every claim it made against what it **actually did** — the commands it ran, their exit codes, the files it changed, the commits it made — and prints a one-page trust report.
 
-**No wrapper. No proxy. No config. No network.** Run it on a session that already happened.
+<p align="center">
+  <img src="assets/report.svg" alt="wdyd report: 'tests pass' contradicted, build/file/commit verified, an out-of-scope shell edit caught by git" width="680">
+</p>
 
-```
-$ wdyd
-
-Session: "refactor auth module" · 47 min · finished 6 min ago
-
-BLAST RADIUS                          CLAIMS
-  14 files changed (+412 −208)          ✓ "build succeeds"      cargo build, exit 0
-  ⚠ 5 files outside src/auth/           ✗ "all tests pass"      NO TEST COMMAND EVER RAN
-    src/billing/invoice.rs  +89         ✓ "created auth_mw.rs"  file exists, Write call
-
-DEPENDENCIES                          LEFT BEHIND
-  + tokio-util 0.7 (not discussed)      3 TODOs, 1 dbg!() in invoice.rs
-
-Trust summary: 2 verified · 1 UNVERIFIED · scope compliance 64%
-```
+**No wrapper. No proxy. No config. No network.** Point it at a session that already happened.
 
 ## Why
 
-Coding agents generate completion language regardless of the actual state of the codebase. They will write "tests passing" while the suite has syntax errors, and claim files exist that were never written. The industry answer so far is heavyweight: orchestration platforms, MCP gateways, CI verification layers — all of which require changing how you run your agent *before* they deliver value.
+Coding agents produce completion language regardless of the actual state of the code. They'll write *"tests passing"* while the suite is red, and claim files exist that were never written. The common answers are heavyweight — orchestration platforms, MCP gateways, CI layers — all of which change how you run your agent *before* they deliver any value.
 
-`wdyd` takes the opposite bet: the evidence is already on your disk. Claude Code writes a full JSONL transcript of every session — every tool call, every command, every exit code. Auditing it should be as cheap as `git status`.
+`wdyd` takes the opposite bet: **the evidence is already on your disk.** Claude Code writes a full JSONL transcript of every session — every tool call, every command, every result. Auditing it should be as cheap as `git status`.
 
 ## Install
 
 ```bash
 cargo install whatdidyoudo        # installs the `wdyd` binary
-# or
-brew install whatdidyoudo         # (planned)
-# or grab a prebuilt binary from Releases
 ```
+
+Or grab a prebuilt binary from [Releases](https://github.com/keenanjohnson/whatdidyoudo/releases). Homebrew tap coming with the first tagged release.
 
 ## Usage
 
 ```bash
-wdyd                    # audit the most recent session in this project
-wdyd --last 3           # audit the last three sessions
-wdyd --session <id>     # audit a specific session
-wdyd --since monday     # list sessions since a date with one-line trust summaries
-wdyd --md               # markdown output, ready to paste into a PR description
-wdyd --json             # machine-readable, for scripting
-wdyd --check            # exit non-zero on unverified/contradicted claims — for hooks & CI
+wdyd                              # audit the latest session in this project
+wdyd --session path/to.jsonl      # audit a specific transcript
+wdyd --format md                  # Markdown, ready to paste into a PR
+wdyd --format json                # machine-readable, for scripting
+wdyd --check                      # exit non-zero if any claim is CONTRADICTED
 ```
 
-The `--check` flag composes with git pre-commit hooks, CI jobs, and Claude Code Stop hooks so the audit runs automatically when a session ends. See `docs/user-experience.md` for recipes.
+Run `wdyd` from inside the repo the session belongs to — that's how it reaches the git history and files to verify against.
+
+`--check` composes with git pre-commit hooks and CI so the audit runs automatically:
+
+```bash
+wdyd --check || echo "an agent claim was contradicted — look before you merge"
+```
 
 ## What it checks
 
-- **Blast radius** — every file the agent touched (from tool calls, cross-checked against git), annotated in-scope / out-of-scope relative to the task.
-- **Claims vs. evidence** — assertions like "tests pass", "build succeeds", "created X", "committed" are extracted from the agent's own words and matched against the commands it actually ran and their exit codes. Verdicts: `verified`, `unverified` (claim made, nothing ever ran), `contradicted` (it ran, it failed, the claim was made anyway).
-- **Dependencies** — packages installed mid-session, flagged if never discussed.
-- **Hygiene** — TODOs, debug prints, and other droppings left in the diff.
+- **Claims vs. evidence** — assertions like *tests pass*, *build succeeds*, *created X*, and *committed* are extracted from the agent's own words and matched against reality:
+  - `VERIFIED` — the evidence backs it (the test command exited 0; the file is on disk; a commit exists in the session window).
+  - `CONTRADICTED` — the evidence refutes it (the build command *failed*, yet success was claimed).
+  - `UNVERIFIED` — the claim was made but nothing corroborates or refutes it.
+- **Blast radius** — every file the agent touched, in-scope / out-of-scope relative to the task. Cross-checked against git, so edits made via `sed` or shell — not just `Write`/`Edit` — are caught too (shown as `shell/git`).
+- **Trust summary** — one line: `N verified · M unverified · K contradicted · scope X%`.
+
+Dependency and hygiene (leftover TODOs / debug prints) analyzers are on the roadmap.
+
+## How it works
+
+```
+discovery → ingestion → analyzers (+ git/fs evidence) → report
+find the    JSONL →     blast radius · commands ·        terminal /
+session     Event       claims extract + verify          md / json
+            timeline
+```
+
+The extractor pattern-matches the agent's prose into a small, mechanically-checkable claim taxonomy and knows nothing about truth. The verifier matches those claims against evidence and knows nothing about how they were extracted. The two never share a line — so a missed claim is a regex gap, and a wrong verdict is a logic bug, and you always know which.
 
 ## Principles
 
 1. **Read-only and retroactive.** Zero changes to how you run your agent. Value on the first run, against history you already have.
-2. **Offline by default, forever.** No API calls, no telemetry, no accounts. The tool that audits your agent should not itself be a supply-chain question mark.
-3. **Evidence over narration.** An agent saying it did something is not evidence. Exit codes, diffs, and files on disk are.
+2. **Offline by default, forever.** No API calls, no telemetry, no accounts. The tool that audits your agent shouldn't itself be a supply-chain question mark.
+3. **Evidence over narration.** An agent saying it did something is not evidence. Exit codes, diffs, and commits are.
 4. **Degrade, never crash.** The transcript format is undocumented and churns; unknown content becomes an `Unknown` event, not a panic.
 
 ## Status
 
-Pre-alpha. Claude Code (local sessions) is the first supported agent; the parser is behind a `SourceAdapter` trait so Codex / Cursor / others can follow. See `docs/roadmap.md`.
+Pre-alpha, but the core works end-to-end. Claude Code (local sessions) is the first supported agent; the parser sits behind a `SourceAdapter` trait so Codex / Cursor / others can follow. See [`docs/roadmap.md`](docs/roadmap.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ## License
 
-MIT
+MIT OR Apache-2.0
