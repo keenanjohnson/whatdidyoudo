@@ -21,7 +21,7 @@
 - [x] Trust summary + scope-compliance %
 - [x] `--md` renderer (PR-paste-ready), `--check` exit codes
 - [ ] Hygiene analyzer (TODOs, debug prints)
-- [x] README with real report hero (SVG of genuine `wdyd` output); 30s demo GIF still optional
+- [x] README with real report hero — 30-second demo GIF of genuine `wdyd` output (recorded with vhs)
 
 ## M3 — Launch
 - [x] `cargo-dist`: prebuilt binaries (5 platforms), shell install script, Homebrew formula — needs the `homebrew-tap` repo created + a tap-push token secret before the first release tag
