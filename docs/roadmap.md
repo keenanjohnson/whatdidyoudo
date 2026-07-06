@@ -1,15 +1,15 @@
 # Roadmap
 
 ## M0 — Skeleton (first session in Claude Code)
-- [ ] `cargo new` workspace: lib + thin bin, binary named `wdyd`
-- [ ] Reserve names: publish placeholder `whatdidyoudo` + `wdyd` crates on crates.io
-- [ ] CI: `cargo test`, `clippy -D warnings`, `fmt --check` on push
-- [ ] Collect 2–3 real JSONL transcripts into `fixtures/` (anonymized) — **build the parser against real data, not assumptions**
+- [x] `cargo new` workspace: lib + thin bin, binary named `wdyd`
+- [ ] Reserve names: publish placeholder `whatdidyoudo` + `wdyd` crates on crates.io — manual crates.io action, not yet done
+- [ ] CI: `cargo test`, `clippy -D warnings`, `fmt --check` on push — not yet set up
+- [x] Fixtures in `fixtures/` — pivoted to **synthetic** JSONL (no real data committed), but the parser was dissected/validated against 24 real transcripts first, honoring "build against real data, not assumptions"
 
 ## M1 — Blast radius (working v1, ~weekend one)
 - [x] Discovery: cwd → encoded project dir → latest session; noise filtering
 - [x] `ClaudeCodeAdapter`: streaming permissive JSONL → `Event` timeline
-- [x] Blast-radius analyzer (scope heuristic); command + dependency analyzers still TODO
+- [x] Blast-radius analyzer (scope heuristic) + command analyzer (test/build/other + outcomes); dependency analyzer still TODO
 - [ ] Git evidence provider (diff-stat, commits-since) — also the way to catch Bash/`sed`-based edits the Write/Edit analyzer misses
 - [x] Terminal renderer; `--json`
 - [x] `insta` snapshots for every fixture
@@ -25,7 +25,7 @@
 
 ## M3 — Launch
 - [ ] `cargo-dist`: prebuilt binaries, install script, Homebrew tap
-- [ ] `--last N`, `--session`, `--since`
+- [ ] `--last N`, `--since` (session-selection flags) — `--session <file>` already done
 - [ ] README recipes: pre-commit hook, CI, Claude Code Stop hook
 - [ ] Launch posts (see below)
 
