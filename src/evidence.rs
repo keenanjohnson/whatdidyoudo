@@ -10,3 +10,13 @@ pub trait Evidence {
     fn file_exists(&self, p: &Path) -> bool;
     // diff_stat / commits_since land in M1 alongside concrete git + timestamp types.
 }
+
+/// Real filesystem evidence, resolving relative paths against the process cwd (so
+/// `wdyd` run inside the audited project sees the files the agent claimed to create).
+pub struct FsEvidence;
+
+impl Evidence for FsEvidence {
+    fn file_exists(&self, p: &Path) -> bool {
+        p.exists()
+    }
+}

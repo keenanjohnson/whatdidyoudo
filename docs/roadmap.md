@@ -16,9 +16,9 @@
 - Milestone demo: `cargo install` → `wdyd` in a real project → real blast-radius report in <1s
 
 ## M2 — Claims table (the product, ~weekend two)
-- [ ] Claims extractor: `TestsPass`, `BuildSucceeds`, `FileCreated`, `BugFixed`, `Committed`
-- [ ] Claims verifier with `Verified` / `Unverified` / `Contradicted` + evidence refs
-- [ ] Trust summary + scope-compliance %
+- [x] Claims extractor: `TestsPass`, `BuildSucceeds`, `FileCreated` (+ `BugFixed`, `Committed` extraction TODO)
+- [x] Claims verifier with `Verified` / `Unverified` / `Contradicted` + evidence strings (`Committed` needs git; `BugFixed` unverifiable)
+- [x] Trust summary + scope-compliance %
 - [ ] `--md` renderer (PR-paste-ready), `--check` exit codes
 - [ ] Hygiene analyzer (TODOs, debug prints)
 - [ ] README with real screenshot + 30-second demo GIF at top

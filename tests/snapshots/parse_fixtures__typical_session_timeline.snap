@@ -109,6 +109,6 @@ expression: "events_for(\"session_typical.jsonl\")"
         ts: Timestamp(
             2026-07-01 10:00:09.0 +00:00:00,
         ),
-        text: "Done. I created src/hello.rs and the tests pass.",
+        text: "Done — I created src/hello.rs, the tests pass, and the release build succeeds.",
     },
 ]

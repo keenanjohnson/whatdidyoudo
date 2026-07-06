@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use whatdidyoudo::analyzers::blast_radius;
+use whatdidyoudo::analyzers::{blast_radius, claims};
+use whatdidyoudo::evidence::FsEvidence;
 use whatdidyoudo::{AuditReport, ClaudeCodeAdapter, Discovery, SessionMeta, SourceAdapter};
 
 /// Ask your coding agent "what did you do?" — and check its answers.
@@ -31,12 +32,14 @@ fn main() -> Result<()> {
         .with_context(|| format!("opening transcript {}", session_path.display()))?;
     let events: Vec<_> = ClaudeCodeAdapter::parse(BufReader::new(file)).collect();
 
+    let extracted = claims::extract(&events);
     let report = AuditReport {
         session: SessionMeta {
             path: session_path.display().to_string(),
             events: events.len(),
         },
         blast_radius: blast_radius::analyze(&events),
+        claims: claims::verify(extracted, &events, &FsEvidence),
     };
 
     print!("{}", report.to_terminal());

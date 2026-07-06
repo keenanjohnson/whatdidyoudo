@@ -6,8 +6,9 @@
 
 pub mod blast_radius;
 pub mod claims;
+pub mod commands;
 
-// commands, dependencies, hygiene land in M1/M2.
+// dependencies, hygiene land in M1/M2.
 
 /// The v1 claim taxonomy. Small and mechanically checkable by design — resist prose NLP.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,9 +21,10 @@ pub enum ClaimKind {
 }
 
 /// Result of verifying a claim against evidence dated before the claim's timestamp.
-#[derive(Debug, Clone)]
+/// Each variant carries a one-line human explanation of the evidence (or its absence).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
-    Verified, // + EvidenceRef in M2
-    Unverified,
-    Contradicted, // + EvidenceRef in M2
+    Verified(String),
+    Unverified(String),
+    Contradicted(String),
 }
