@@ -9,4 +9,4 @@ pub mod evidence;
 pub mod ingestion;
 pub mod report;
 
-pub use ingestion::{Event, Timestamp};
+pub use ingestion::{ClaudeCodeAdapter, Event, SourceAdapter, Timestamp, ToolOutcome};

@@ -28,11 +28,25 @@ The only code that knows the raw Claude Code JSONL format. Streams line-by-line 
 enum Event {
     UserMessage   { ts: Timestamp, text: String },
     AssistantText { ts: Timestamp, text: String },          // claims live here
-    ToolCall      { ts: Timestamp, id: CallId, tool: ToolKind, input: ToolInput },
-    ToolResult    { ts: Timestamp, call_id: CallId, exit_code: Option<i32>, output: String },
+    ToolCall      { ts: Timestamp, id: CallId, tool: String, input: ToolInput },
+    ToolResult    { ts: Timestamp, call_id: CallId, outcome: ToolOutcome, output: String },
     Unknown       { ts: Option<Timestamp>, raw: serde_json::Value },  // never drop, never crash
 }
 ```
+
+**Schema notes confirmed against real transcripts (2026-07):**
+
+- Each JSONL line has a top-level `type`. Only `user` and `assistant` carry auditable content; `system` / `mode` / `ai-title` / `attachment` / `file-history-snapshot` / `queue-operation` / `last-prompt` are metadata → `Unknown` (noise-filtered in discovery, not ingestion).
+- `message.content` is either a **string** (real user prompt) or an **array of blocks** (`thinking` / `text` / `tool_use` for assistant; `tool_result` for user). One line can yield several events. `thinking` blocks are dropped — not auditable.
+- `tool_use.id` ↔ `tool_result.tool_use_id` is the `CallId` pairing.
+- **There is no numeric exit code in the transcript.** A Bash result's structured `toolUseResult` is `{ interrupted, isImage, noOutputExpected, stderr, stdout }`. Success/failure is *derived* from the `tool_result` block's `is_error: bool` plus `interrupted`, so `ToolResult` carries a `ToolOutcome`, not a synthesized `Option<i32>`:
+
+  ```rust
+  enum ToolOutcome { Ok, Failed, Interrupted, Unknown }
+  ```
+
+- The top-level `toolUseResult` object is richer than the block content and is the preferred evidence source: Edit/Write results carry `{ filePath, oldString, newString, structuredPatch, userModified, originalFile }` (real edited path + a "did the human change it" flag); subagent results carry `{ agentId, agentType, … }` (edge case #2).
+- `input` is normalized to `ToolInput` (a `BTreeMap<String,String>` of the tool call's fields) so no `serde_json::Value` crosses the adapter boundary.
 
 Behind a `SourceAdapter` trait:
 
