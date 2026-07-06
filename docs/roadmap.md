@@ -7,12 +7,12 @@
 - [ ] Collect 2–3 real JSONL transcripts into `fixtures/` (anonymized) — **build the parser against real data, not assumptions**
 
 ## M1 — Blast radius (working v1, ~weekend one)
-- [ ] Discovery: cwd → encoded project dir → latest session; noise filtering
-- [ ] `ClaudeCodeAdapter`: streaming permissive JSONL → `Event` timeline
-- [ ] Blast-radius + command + dependency analyzers
-- [ ] Git evidence provider (diff-stat, commits-since)
-- [ ] Terminal renderer; `--json`
-- [ ] `insta` snapshots for every fixture
+- [x] Discovery: cwd → encoded project dir → latest session; noise filtering
+- [x] `ClaudeCodeAdapter`: streaming permissive JSONL → `Event` timeline
+- [x] Blast-radius analyzer (scope heuristic); command + dependency analyzers still TODO
+- [ ] Git evidence provider (diff-stat, commits-since) — also the way to catch Bash/`sed`-based edits the Write/Edit analyzer misses
+- [x] Terminal renderer; `--json` still TODO
+- [x] `insta` snapshots for every fixture
 - Milestone demo: `cargo install` → `wdyd` in a real project → real blast-radius report in <1s
 
 ## M2 — Claims table (the product, ~weekend two)

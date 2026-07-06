@@ -9,4 +9,6 @@ pub mod evidence;
 pub mod ingestion;
 pub mod report;
 
+pub use discovery::Discovery;
 pub use ingestion::{ClaudeCodeAdapter, Event, SourceAdapter, Timestamp, ToolOutcome};
+pub use report::{AuditReport, SessionMeta};

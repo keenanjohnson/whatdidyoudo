@@ -4,9 +4,10 @@
 //! Extraction and verification stay deliberately separate: extraction failures are
 //! regex gaps (patch with fixtures); verification failures are logic bugs.
 
+pub mod blast_radius;
 pub mod claims;
 
-// blast_radius, commands, dependencies, hygiene land in M1/M2.
+// commands, dependencies, hygiene land in M1/M2.
 
 /// The v1 claim taxonomy. Small and mechanically checkable by design — resist prose NLP.
 #[derive(Debug, Clone, PartialEq, Eq)]
