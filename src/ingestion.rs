@@ -22,6 +22,11 @@ impl Timestamp {
     fn parse(s: &str) -> Option<Self> {
         OffsetDateTime::parse(s, &Rfc3339).ok().map(Timestamp)
     }
+
+    /// RFC 3339 rendering for machine-readable output (`--json`).
+    pub fn to_rfc3339(&self) -> String {
+        self.0.format(&Rfc3339).unwrap_or_default()
+    }
 }
 
 /// Opaque id linking a `ToolCall` to its `ToolResult`.

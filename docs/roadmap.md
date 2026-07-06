@@ -11,7 +11,7 @@
 - [x] `ClaudeCodeAdapter`: streaming permissive JSONL → `Event` timeline
 - [x] Blast-radius analyzer (scope heuristic); command + dependency analyzers still TODO
 - [ ] Git evidence provider (diff-stat, commits-since) — also the way to catch Bash/`sed`-based edits the Write/Edit analyzer misses
-- [x] Terminal renderer; `--json` still TODO
+- [x] Terminal renderer; `--json`
 - [x] `insta` snapshots for every fixture
 - Milestone demo: `cargo install` → `wdyd` in a real project → real blast-radius report in <1s
 
@@ -19,7 +19,7 @@
 - [x] Claims extractor: `TestsPass`, `BuildSucceeds`, `FileCreated` (+ `BugFixed`, `Committed` extraction TODO)
 - [x] Claims verifier with `Verified` / `Unverified` / `Contradicted` + evidence strings (`Committed` needs git; `BugFixed` unverifiable)
 - [x] Trust summary + scope-compliance %
-- [ ] `--md` renderer (PR-paste-ready), `--check` exit codes
+- [x] `--md` renderer (PR-paste-ready), `--check` exit codes
 - [ ] Hygiene analyzer (TODOs, debug prints)
 - [ ] README with real screenshot + 30-second demo GIF at top
 

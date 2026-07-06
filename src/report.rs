@@ -5,6 +5,7 @@
 
 use comfy_table::{Cell, Color, Table};
 use owo_colors::OwoColorize;
+use serde::Serialize;
 
 use crate::analyzers::blast_radius::BlastRadius;
 use crate::analyzers::claims::Claim;
@@ -139,6 +140,175 @@ impl AuditReport {
         };
         format!("{colored}\n")
     }
+
+    /// Machine-readable output for scripting / CI. Stable shape, decoupled from
+    /// internal types via a dedicated DTO.
+    pub fn to_json(&self) -> String {
+        let s = self.trust_summary();
+        let claims = self
+            .claims
+            .iter()
+            .map(|(c, v)| {
+                let (verdict, evidence) = verdict_parts(v);
+                JsonClaim {
+                    kind: kind_tag(&c.kind),
+                    claim: claim_label(&c.kind),
+                    verdict,
+                    evidence,
+                    at: c.ts.to_rfc3339(),
+                }
+            })
+            .collect();
+        let blast_radius = self
+            .blast_radius
+            .files
+            .iter()
+            .map(|f| JsonFile {
+                path: &f.path,
+                tool: &f.tool,
+                in_scope: f.in_scope,
+            })
+            .collect();
+        let dto = JsonReport {
+            session: JsonSession {
+                path: &self.session.path,
+                events: self.session.events,
+            },
+            trust: JsonTrust {
+                verified: s.verified,
+                unverified: s.unverified,
+                contradicted: s.contradicted,
+                scope_pct: s.scope_pct,
+            },
+            claims,
+            blast_radius,
+        };
+        serde_json::to_string_pretty(&dto).unwrap_or_else(|_| "{}".into())
+    }
+
+    /// GitHub-flavored Markdown — paste-ready into a PR comment.
+    pub fn to_markdown(&self) -> String {
+        let s = self.trust_summary();
+        let mut out = String::from("## what did you do?\n\n");
+        out.push_str(&format!(
+            "`{}` · {} events\n\n",
+            self.session.path, self.session.events
+        ));
+        out.push_str(&format!(
+            "**{} verified · {} unverified · {} contradicted · scope {}%**\n\n",
+            s.verified, s.unverified, s.contradicted, s.scope_pct
+        ));
+
+        out.push_str("### Claims\n\n");
+        if self.claims.is_empty() {
+            out.push_str("_no checkable claims found_\n\n");
+        } else {
+            out.push_str("| Claim | Verdict | Evidence |\n|---|---|---|\n");
+            for (c, v) in &self.claims {
+                let (tag, evidence) = verdict_parts(v);
+                out.push_str(&format!(
+                    "| {} | {} {} | {} |\n",
+                    claim_label(&c.kind),
+                    verdict_emoji(v),
+                    tag,
+                    md_escape(evidence),
+                ));
+            }
+            out.push('\n');
+        }
+
+        out.push_str("### Blast radius\n\n");
+        if self.blast_radius.files.is_empty() {
+            out.push_str("_no files written via Write/Edit_\n");
+        } else {
+            out.push_str("| File | Tool | Scope |\n|---|---|---|\n");
+            for f in &self.blast_radius.files {
+                let scope = if f.in_scope {
+                    "in scope"
+                } else {
+                    "**out of scope**"
+                };
+                out.push_str(&format!(
+                    "| {} | {} | {} |\n",
+                    md_escape(&f.path),
+                    f.tool,
+                    scope
+                ));
+            }
+        }
+        out
+    }
+}
+
+// ---- JSON DTO (stable wire format, independent of domain types) ----
+
+#[derive(Serialize)]
+struct JsonReport<'a> {
+    session: JsonSession<'a>,
+    trust: JsonTrust,
+    claims: Vec<JsonClaim<'a>>,
+    blast_radius: Vec<JsonFile<'a>>,
+}
+
+#[derive(Serialize)]
+struct JsonSession<'a> {
+    path: &'a str,
+    events: usize,
+}
+
+#[derive(Serialize)]
+struct JsonTrust {
+    verified: usize,
+    unverified: usize,
+    contradicted: usize,
+    scope_pct: u8,
+}
+
+#[derive(Serialize)]
+struct JsonClaim<'a> {
+    kind: &'static str,
+    claim: String,
+    verdict: &'static str,
+    evidence: &'a str,
+    at: String,
+}
+
+#[derive(Serialize)]
+struct JsonFile<'a> {
+    path: &'a str,
+    tool: &'a str,
+    in_scope: bool,
+}
+
+fn verdict_parts(v: &Verdict) -> (&'static str, &str) {
+    match v {
+        Verdict::Verified(e) => ("Verified", e.as_str()),
+        Verdict::Unverified(e) => ("Unverified", e.as_str()),
+        Verdict::Contradicted(e) => ("Contradicted", e.as_str()),
+    }
+}
+
+fn verdict_emoji(v: &Verdict) -> &'static str {
+    match v {
+        Verdict::Verified(_) => "✅",
+        Verdict::Unverified(_) => "⚠️",
+        Verdict::Contradicted(_) => "❌",
+    }
+}
+
+fn kind_tag(kind: &ClaimKind) -> &'static str {
+    match kind {
+        ClaimKind::TestsPass => "TestsPass",
+        ClaimKind::BuildSucceeds => "BuildSucceeds",
+        ClaimKind::FileCreated(_) => "FileCreated",
+        ClaimKind::BugFixed => "BugFixed",
+        ClaimKind::Committed => "Committed",
+    }
+}
+
+/// Escape the pipe so evidence/paths can't break a Markdown table row.
+fn md_escape(s: &str) -> String {
+    s.replace('|', "\\|")
 }
 
 /// Percent of written files that were in scope; 100% when nothing was written.

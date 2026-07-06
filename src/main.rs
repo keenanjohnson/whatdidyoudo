@@ -3,9 +3,10 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 use whatdidyoudo::analyzers::{blast_radius, claims};
 use whatdidyoudo::evidence::FsEvidence;
@@ -18,9 +19,38 @@ struct Cli {
     /// Audit a specific transcript file instead of the latest session for this project.
     #[arg(long, value_name = "FILE")]
     session: Option<PathBuf>,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = Format::Terminal)]
+    format: Format,
+
+    /// Exit non-zero (2) if any claim is CONTRADICTED — for pre-commit / CI gates.
+    #[arg(long)]
+    check: bool,
 }
 
-fn main() -> Result<()> {
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+enum Format {
+    /// Colored tables for a terminal (default).
+    #[default]
+    Terminal,
+    /// Pretty JSON for scripting.
+    Json,
+    /// GitHub-flavored Markdown, paste-ready into a PR.
+    Md,
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("wdyd: {e:#}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
 
     let session_path = match cli.session {
@@ -42,8 +72,19 @@ fn main() -> Result<()> {
         claims: claims::verify(extracted, &events, &FsEvidence),
     };
 
-    print!("{}", report.to_terminal());
-    Ok(())
+    match cli.format {
+        Format::Terminal => print!("{}", report.to_terminal()),
+        Format::Json => println!("{}", report.to_json()),
+        Format::Md => println!("{}", report.to_markdown()),
+    }
+
+    // --check turns a contradicted claim into a failing exit code.
+    let contradicted = report.trust_summary().contradicted;
+    Ok(if cli.check && contradicted > 0 {
+        ExitCode::from(2)
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Find the most recent auditable session for the current directory.
