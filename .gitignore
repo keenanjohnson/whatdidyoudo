@@ -1,2 +1,5 @@
 /target
 Cargo.lock.orig
+
+# OSX File
+.DS_store
