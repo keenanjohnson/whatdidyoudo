@@ -196,12 +196,14 @@ fn command_verdict(
     match run {
         None => Verdict::Unverified(format!("no {label} command ran before the claim")),
         Some(r) => match r.outcome {
-            ToolOutcome::Ok => Verdict::Verified(format!("`{}` exited ok", r.command)),
-            ToolOutcome::Failed => Verdict::Contradicted(format!("`{}` failed", r.command)),
+            ToolOutcome::Ok => Verdict::Verified(format!("`{}` exited ok", r.decisive)),
+            ToolOutcome::Failed => Verdict::Contradicted(format!("`{}` failed", r.decisive)),
             ToolOutcome::Interrupted => {
-                Verdict::Unverified(format!("`{}` was interrupted", r.command))
+                Verdict::Unverified(format!("`{}` was interrupted", r.decisive))
             }
-            ToolOutcome::Unknown => Verdict::Unverified(format!("`{}` outcome unknown", r.command)),
+            ToolOutcome::Unknown => {
+                Verdict::Unverified(format!("`{}` outcome unknown", r.decisive))
+            }
         },
     }
 }
