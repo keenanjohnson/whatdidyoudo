@@ -50,8 +50,11 @@ pub fn extract(events: &[Event]) -> Vec<Claim> {
                 quote: quote.to_string(),
             });
         }
-        if let Some(caps) = file_created_re().captures(text) {
-            let path = caps.get(1).unwrap().as_str();
+        if let Some(path) = file_created_re()
+            .captures_iter(text)
+            .map(|caps| caps.get(1).unwrap().as_str())
+            .find(|p| !is_abbreviation(p))
+        {
             claims.push(Claim {
                 kind: ClaimKind::FileCreated(path.into()),
                 ts: *ts,
@@ -89,6 +92,12 @@ fn file_created_re() -> &'static Regex {
     RE.get_or_init(|| {
         Regex::new(r"(?i)\b(?:created|added|wrote|write|generated|new file)\b[^.\n]{0,40}?([\w./\-]+\.[A-Za-z0-9]+)").unwrap()
     })
+}
+
+/// Prose abbreviations that the filename capture mistakes for paths ("i.e", "e.g" —
+/// the final period is never captured, since the pattern requires a character after it).
+fn is_abbreviation(candidate: &str) -> bool {
+    matches!(candidate.to_ascii_lowercase().as_str(), "i.e" | "e.g")
 }
 
 /// A "committed" mention with an optional preceding negation ("not committed",
