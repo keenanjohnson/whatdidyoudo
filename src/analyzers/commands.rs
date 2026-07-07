@@ -30,7 +30,7 @@ pub struct CommandRun {
 pub fn classify(command: &str) -> CommandKind {
     let mut kind = CommandKind::Other;
     for segment in segments(command) {
-        match classify_segment(segment) {
+        match classify_segment(&segment) {
             CommandKind::Test => return CommandKind::Test,
             CommandKind::Build => kind = CommandKind::Build,
             CommandKind::Other => {}
@@ -107,23 +107,55 @@ fn classify_segment(segment: &str) -> CommandKind {
     CommandKind::Other
 }
 
-/// Split a command into shell segments: heredoc bodies dropped, then lines split on
-/// `|`, `;`, `&` (which also covers `&&` / `||` via empty segments).
-fn segments(command: &str) -> impl Iterator<Item = &str> {
+/// Split a command into shell segments: heredoc bodies dropped, quoted spans blanked,
+/// then split on newlines and `|`, `;`, `&` (which also covers `&&` / `||` via empty
+/// segments). Quotes are blanked first so prose inside a quoted argument can't form a
+/// segment — `git commit -m "foo | ctest"` must stay one `git` segment.
+fn segments(command: &str) -> Vec<String> {
+    let mut kept = Vec::new();
     let mut terminator: Option<&str> = None;
-    command
-        .lines()
-        .filter(move |line| {
-            if let Some(t) = terminator {
-                if line.trim() == t {
-                    terminator = None;
-                }
-                return false;
+    for line in command.lines() {
+        if let Some(t) = terminator {
+            if line.trim() == t {
+                terminator = None;
             }
-            terminator = heredoc_terminator(line);
-            true
-        })
-        .flat_map(|line| line.split(['|', ';', '&']))
+            continue;
+        }
+        terminator = heredoc_terminator(line);
+        kept.push(line);
+    }
+    strip_quoted(&kept.join("\n"))
+        .split(['\n', '|', ';', '&'])
+        .map(str::to_string)
+        .collect()
+}
+
+/// Replace single- and double-quoted spans with a space. A quote may span lines
+/// (real newlines inside a quoted commit message). Backslash escapes count only
+/// inside double quotes, matching shell rules.
+fn strip_quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for c in text.chars() {
+        match quote {
+            Some(q) => {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' && q == '"' {
+                    escaped = true;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None if c == '\'' || c == '"' => {
+                quote = Some(c);
+                out.push(' ');
+            }
+            None => out.push(c),
+        }
+    }
+    out
 }
 
 /// The delimiter word of a heredoc started on this line (`<<EOF`, `<<-'EOF'`), if any.
@@ -207,6 +239,21 @@ mod tests {
         assert_eq!(classify("echo \"tests pass\""), CommandKind::Other);
         assert_eq!(
             classify("git commit -m 'make the build green'"),
+            CommandKind::Other
+        );
+    }
+
+    #[test]
+    fn quoted_prose_cannot_start_a_segment() {
+        // A `|` inside a quoted argument is not a pipe — the words after it must not
+        // classify ("ctest" would otherwise read as a test runner).
+        assert_eq!(
+            classify("git commit -m \"foo | ctest\""),
+            CommandKind::Other
+        );
+        assert_eq!(classify("echo 'lint; make; test'"), CommandKind::Other);
+        assert_eq!(
+            classify("git commit -m \"multi line | first\ntest everything works\""),
             CommandKind::Other
         );
     }

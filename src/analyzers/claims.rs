@@ -199,24 +199,30 @@ fn file_verdict(
     evidence: &dyn Evidence,
 ) -> Verdict {
     let target = path.to_string_lossy();
-    // The disk check must use the write's own path, not the claim's: the agent claims a
+    // The disk check must use the writes' own paths, not the claim's: the agent claims a
     // bare name ("created discovery.rs") while the tool wrote the real, often absolute,
     // path — checking the bare name against the root would contradict a true claim.
-    let written = events.iter().find_map(|e| match e {
-        Event::ToolCall {
-            tool, input, ts, ..
-        } if *ts <= claim_ts => write_path_matching(tool, input, &target),
-        _ => None,
-    });
-    match written {
-        Some(written) if evidence.file_exists(Path::new(written)) => {
-            Verdict::Verified("written this session, present on disk".into())
-        }
-        Some(_) => Verdict::Contradicted("claimed created, but not found on disk".into()),
-        None if evidence.file_exists(path) => {
+    // Several writes can suffix-match one claimed name; any of them on disk verifies.
+    let written: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::ToolCall {
+                tool, input, ts, ..
+            } if *ts <= claim_ts => write_path_matching(tool, input, &target),
+            _ => None,
+        })
+        .collect();
+    if written.is_empty() {
+        return if evidence.file_exists(path) {
             Verdict::Unverified("exists on disk, but no write to it this session".into())
-        }
-        None => Verdict::Unverified("no write to this file in the session".into()),
+        } else {
+            Verdict::Unverified("no write to this file in the session".into())
+        };
+    }
+    if written.iter().any(|p| evidence.file_exists(Path::new(p))) {
+        Verdict::Verified("written this session, present on disk".into())
+    } else {
+        Verdict::Contradicted("claimed created, but not found on disk".into())
     }
 }
 

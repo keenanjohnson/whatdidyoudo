@@ -145,6 +145,38 @@ fn commit_command_mentioning_tests_is_not_test_evidence() {
 }
 
 #[test]
+fn any_matching_write_on_disk_verifies_the_claim() {
+    use std::collections::BTreeMap;
+    use whatdidyoudo::ingestion::{CallId, ToolInput};
+
+    // Two writes suffix-match the claimed "discovery.rs"; only the second survives on
+    // disk. The verdict must consider every matching write, not just the first.
+    let write = |ts: i64, path: &str| Event::ToolCall {
+        ts: Timestamp::from_unix(ts).unwrap(),
+        id: CallId(format!("call{ts}")),
+        tool: "Write".into(),
+        input: ToolInput(BTreeMap::from([(
+            "file_path".to_string(),
+            path.to_string(),
+        )])),
+    };
+    let ev = vec![
+        write(1, "/repo/tests/discovery.rs"),
+        write(2, "/repo/src/discovery.rs"),
+        Event::AssistantText {
+            ts: Timestamp::from_unix(3).unwrap(),
+            text: "Created discovery.rs".into(),
+        },
+    ];
+    let disk = RepoWithFiles(vec!["/repo/src/discovery.rs"]);
+    let v = claims::verify(claims::extract(&ev), &ev, &disk);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::FileCreated("discovery.rs".into())),
+        Verdict::Verified(_)
+    ));
+}
+
+#[test]
 fn extracts_a_committed_claim() {
     let claims = claims::extract(&events("session_committed.jsonl"));
     assert_eq!(
