@@ -175,10 +175,7 @@ fn command_verdict(
     claim_ts: Timestamp,
     label: &str,
 ) -> Verdict {
-    let run = runs
-        .iter()
-        .filter(|r| r.kind == kind && r.ts <= claim_ts)
-        .next_back();
+    let run = runs.iter().rfind(|r| r.kind == kind && r.ts <= claim_ts);
     match run {
         None => Verdict::Unverified(format!("no {label} command ran before the claim")),
         Some(r) => match r.outcome {
