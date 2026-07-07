@@ -23,9 +23,9 @@ Per CLAUDE.md, every verdict-bug fix needs a fixture in `fixtures/` + an `insta`
 
 ## 3. Infra before sharing
 
-- [ ] **CI** — `cargo test` + `clippy -D warnings` + `fmt --check` on push (GitHub Actions). Cheap; do first among infra.
+- [x] **CI** — `cargo test` + `clippy -D warnings` + `fmt --check` on push (GitHub Actions). Cheap; do first among infra.
 - [ ] **Reserve crates.io names** — publish placeholder `whatdidyoudo` + `wdyd` (manual crates.io action).
-- [ ] **Homebrew tap** — create the `homebrew-tap` repo + tap-push token secret before the first `cargo-dist` release tag.
+- [x] **Homebrew tap** — create the `homebrew-tap` repo + tap-push token secret before the first `cargo-dist` release tag.
 
 ## Optional (fine to ship without)
 
