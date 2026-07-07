@@ -11,7 +11,7 @@ Per CLAUDE.md, every verdict-bug fix needs a fixture in `fixtures/` + an `insta`
 - [x] **False `CONTRADICTED: created discovery.rs`** — fixed: `file_verdict` now checks disk existence of the *matched write path* (often absolute), not the bare claimed name. Regression test: `relative_claim_verifies_against_the_absolute_write_path`.
 - [x] **False `CONTRADICTED: committed`** — fixed both halves: the extractor skips negated mentions ("not committed yet"), and "no commit found in window" is now `Unverified`, not `Contradicted` (the claim may recap an earlier session; log windowing can miss rebases/amends).
 - [x] **False `VERIFIED: tests pass`** — fixed: `classify` is now structural — heredoc bodies stripped, commands split into shell segments, only the program word (plus launcher sub-command like `cargo test`) classifies. Prose in `echo`/commit messages can't count as a test run.
-- [ ] **Extractor captures "i.e." as a filename** — found while re-auditing after the fixes above: `file_created_re` matched prose containing "i.e" as `FileCreated("i.e")` (harmlessly `Unverified`, but sloppy). Exclude abbreviation-shaped captures (`i.e`, `e.g`) or require a known file extension.
+- [x] **Extractor captures "i.e." as a filename** — fixed: abbreviation-shaped captures (`i.e`, `e.g`) are skipped, and the extractor scans past them so a real filename later in the same message still extracts. Regression tests: `prose_abbreviations_are_not_filenames`, `abbreviation_does_not_shadow_a_real_filename`, plus the "i.e." prose planted in `fixtures/session_false_verdicts.jsonl`.
 
 ## 2. Output polish
 

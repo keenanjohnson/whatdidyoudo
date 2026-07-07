@@ -105,7 +105,8 @@ fn file_creation_verifies_when_the_file_is_on_disk() {
 #[test]
 fn negated_committed_mention_is_not_a_claim() {
     // "not committed yet" in the recap message must not extract; only the final
-    // message's positive "committed" does.
+    // message's positive "committed" does. The same recap says "Added a guard …,
+    // i.e. …" — the abbreviation must not extract as FileCreated("i.e") either.
     let claims = claims::extract(&events("session_false_verdicts.jsonl"));
     let kinds: Vec<_> = claims.iter().map(|c| c.kind.clone()).collect();
     assert_eq!(
@@ -174,6 +175,35 @@ fn any_matching_write_on_disk_verifies_the_claim() {
         verdict_for(&v, &ClaimKind::FileCreated("discovery.rs".into())),
         Verdict::Verified(_)
     ));
+}
+
+#[test]
+fn prose_abbreviations_are_not_filenames() {
+    // "i.e" / "e.g" are shaped like filenames to the capture pattern but are prose.
+    let text = |s: &str| Event::AssistantText {
+        ts: Timestamp::from_unix(1).unwrap(),
+        text: s.into(),
+    };
+    let ev = vec![
+        text("Added a guard clause, i.e. empty input is now rejected."),
+        text("Wrote stricter checks, E.g. negative counts now error."),
+    ];
+    assert!(claims::extract(&ev).is_empty());
+}
+
+#[test]
+fn abbreviation_does_not_shadow_a_real_filename() {
+    // The first regex match is "i.e"; the extractor must skip past it and still
+    // find the real file mentioned later in the same message.
+    let ev = vec![Event::AssistantText {
+        ts: Timestamp::from_unix(1).unwrap(),
+        text: "Added the module, i.e. created src/parser.rs with the new logic.".into(),
+    }];
+    let kinds: Vec<_> = claims::extract(&ev)
+        .iter()
+        .map(|c| c.kind.clone())
+        .collect();
+    assert_eq!(kinds, vec![ClaimKind::FileCreated("src/parser.rs".into())]);
 }
 
 #[test]
