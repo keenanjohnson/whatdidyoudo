@@ -5,6 +5,9 @@
 //! mentioned in the user's messages. Git cross-checking is a later M1 step.
 
 use std::path::Path;
+use std::sync::OnceLock;
+
+use regex::Regex;
 
 use crate::ingestion::Event;
 
@@ -27,6 +30,10 @@ pub struct FileTouch {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BlastRadius {
     pub files: Vec<FileTouch>,
+    /// True when the user's messages named no concrete file or path — the task was
+    /// broad ("build the tool"), so per-file scope has no signal and renderers must
+    /// present it neutrally instead of accusing every touch of being out of scope.
+    pub broad_task: bool,
 }
 
 impl BlastRadius {
@@ -57,7 +64,20 @@ pub fn analyze(events: &[Event]) -> BlastRadius {
         });
     }
 
-    BlastRadius { files }
+    BlastRadius {
+        broad_task: !names_paths(&user_text),
+        files,
+    }
+}
+
+/// Did the user name any file or path at all? A slashed path ("src/hello.rs") or a
+/// dotted file name ("hello.rs"), skipping prose abbreviations ("i.e.", "e.g.").
+/// The extension must start with a letter so version numbers ("1.2.3") don't count.
+fn names_paths(user_text: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"[\w.-]+/[\w./-]+|\b[\w-]+\.[A-Za-z]\w*\b").unwrap());
+    re.find_iter(user_text)
+        .any(|m| !matches!(m.as_str().to_ascii_lowercase().as_str(), "i.e" | "e.g"))
 }
 
 /// Fold git-derived changes into an existing blast radius: any file changed in the

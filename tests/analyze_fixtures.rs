@@ -33,6 +33,31 @@ fn blast_radius_empty_for_noise_session() {
 }
 
 #[test]
+fn task_naming_a_file_is_not_broad() {
+    // "Add a greet() function in src/hello.rs …" names a path — scope is judgeable.
+    let br = blast_radius::analyze(&events("session_typical.jsonl"));
+    assert!(!br.broad_task);
+}
+
+#[test]
+fn task_naming_no_files_is_broad() {
+    // "Finish the discovery module and commit it." names nothing — this session
+    // scored a hostile 0% scope before broad-task detection.
+    let br = blast_radius::analyze(&events("session_false_verdicts.jsonl"));
+    assert!(br.broad_task);
+}
+
+#[test]
+fn prose_abbreviations_do_not_defeat_broad_task_detection() {
+    use whatdidyoudo::Timestamp;
+    let ev = vec![whatdidyoudo::Event::UserMessage {
+        ts: Timestamp::from_unix(1).unwrap(),
+        text: "Clean up the error handling, i.e. stop panicking on bad input.".into(),
+    }];
+    assert!(blast_radius::analyze(&ev).broad_task);
+}
+
+#[test]
 fn git_changes_merge_without_duplicating_tool_writes() {
     use std::path::PathBuf;
     let ev = events("session_typical.jsonl"); // wrote src/hello.rs via Write

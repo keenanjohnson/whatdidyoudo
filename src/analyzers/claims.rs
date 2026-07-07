@@ -20,7 +20,8 @@ use crate::ingestion::{Event, Timestamp, ToolOutcome};
 pub struct Claim {
     pub kind: ClaimKind,
     pub ts: Timestamp,
-    /// The agent's own words that triggered the claim — shown in the report.
+    /// The agent's own words that triggered the claim — the line of the message
+    /// containing the match, so an accusation can show what the agent actually said.
     pub quote: String,
 }
 
@@ -35,41 +36,47 @@ pub fn extract(events: &[Event]) -> Vec<Claim> {
         let Event::AssistantText { ts, text } = event else {
             continue;
         };
-        let quote = text.trim();
-        if tests_pass_re().is_match(text) {
+        if let Some(m) = tests_pass_re().find(text) {
             claims.push(Claim {
                 kind: ClaimKind::TestsPass,
                 ts: *ts,
-                quote: quote.to_string(),
+                quote: line_around(text, m.start()),
             });
         }
-        if build_ok_re().is_match(text) {
+        if let Some(m) = build_ok_re().find(text) {
             claims.push(Claim {
                 kind: ClaimKind::BuildSucceeds,
                 ts: *ts,
-                quote: quote.to_string(),
+                quote: line_around(text, m.start()),
             });
         }
-        if let Some(path) = file_created_re()
+        if let Some(caps) = file_created_re()
             .captures_iter(text)
-            .map(|caps| caps.get(1).unwrap().as_str())
-            .find(|p| !is_abbreviation(p))
+            .find(|caps| !is_abbreviation(caps.get(1).unwrap().as_str()))
         {
             claims.push(Claim {
-                kind: ClaimKind::FileCreated(path.into()),
+                kind: ClaimKind::FileCreated(caps.get(1).unwrap().as_str().into()),
                 ts: *ts,
-                quote: quote.to_string(),
+                quote: line_around(text, caps.get(0).unwrap().start()),
             });
         }
-        if claims_committed(text) {
+        if let Some(at) = committed_claim_at(text) {
             claims.push(Claim {
                 kind: ClaimKind::Committed,
                 ts: *ts,
-                quote: quote.to_string(),
+                quote: line_around(text, at),
             });
         }
     }
     claims
+}
+
+/// The full line of `text` containing byte offset `at`, trimmed — sentence-scale
+/// context for the report, instead of dumping the whole message.
+fn line_around(text: &str, at: usize) -> String {
+    let start = text[..at].rfind('\n').map_or(0, |i| i + 1);
+    let end = text[at..].find('\n').map_or(text.len(), |i| at + i);
+    text[start..end].trim().to_string()
 }
 
 fn tests_pass_re() -> &'static Regex {
@@ -112,11 +119,12 @@ fn committed_re() -> &'static Regex {
     })
 }
 
-/// True when the text mentions "committed" at least once *without* a negation in front.
-fn claims_committed(text: &str) -> bool {
+/// Byte offset of the first "committed" mention *without* a negation in front, if any.
+fn committed_claim_at(text: &str) -> Option<usize> {
     committed_re()
         .captures_iter(text)
-        .any(|c| c.name("neg").is_none())
+        .find(|c| c.name("neg").is_none())
+        .map(|c| c.get(0).unwrap().start())
 }
 
 // ============================ Verifier ============================
