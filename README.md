@@ -1,6 +1,6 @@
 # whatdidyoudo
 
-> Your agent says *"Done! All tests pass."* Did it?
+> Your agent says *"Done! I finished the task."* This tool helps you figure out if it did.
 
 `wdyd` is a one-command, after-the-fact audit for AI coding agent sessions. It reads the transcript your agent already wrote to disk, cross-references every claim it made against what it **actually did** — the commands it ran, their exit codes, the files it changed, the commits it made — and prints a one-page trust report.
 
