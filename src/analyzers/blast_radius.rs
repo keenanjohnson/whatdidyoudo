@@ -30,9 +30,10 @@ pub struct FileTouch {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BlastRadius {
     pub files: Vec<FileTouch>,
-    /// True when the user's messages named no concrete file or path — the task was
-    /// broad ("build the tool"), so per-file scope has no signal and renderers must
-    /// present it neutrally instead of accusing every touch of being out of scope.
+    /// True when the user's messages named no concrete file and no touched file
+    /// matched them — the task was broad ("build the tool"), so per-file scope has
+    /// no signal and renderers must present it neutrally instead of accusing every
+    /// touch of being out of scope.
     pub broad_task: bool,
 }
 
@@ -65,18 +66,26 @@ pub fn analyze(events: &[Event]) -> BlastRadius {
     }
 
     BlastRadius {
-        broad_task: !names_paths(&user_text),
+        // A touched file matching the user's words is scope signal even when the
+        // file regex sees nothing ("update the Makefile" has no extension).
+        broad_task: !names_files(&user_text) && !files.iter().any(|f| f.in_scope),
         files,
     }
 }
 
-/// Did the user name any file or path at all? A slashed path ("src/hello.rs") or a
-/// dotted file name ("hello.rs"), skipping prose abbreviations ("i.e.", "e.g.").
-/// The extension must start with a letter so version numbers ("1.2.3") don't count.
-fn names_paths(user_text: &str) -> bool {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"[\w.-]+/[\w./-]+|\b[\w-]+\.[A-Za-z]\w*\b").unwrap());
-    re.find_iter(user_text)
+/// Did the user name a concrete file? Requires a dot-extension ("hello.rs",
+/// "src/hello.rs") — slash-separated prose ("and/or", an owner/repo slug) must not
+/// count, and it can't be told apart from an extensionless path structurally. URLs
+/// are stripped first so "github.com/…" doesn't count either. The extension must
+/// start with a letter so version numbers ("1.2.3") don't count, and "i.e."/"e.g."
+/// are prose. Misses fail toward `broad_task`, i.e. neutral scope — never hostile.
+fn names_files(user_text: &str) -> bool {
+    static URL: OnceLock<Regex> = OnceLock::new();
+    static FILE: OnceLock<Regex> = OnceLock::new();
+    let url = URL.get_or_init(|| Regex::new(r"\bhttps?://\S+|\bwww\.\S+").unwrap());
+    let file = FILE.get_or_init(|| Regex::new(r"\b[\w-]+\.[A-Za-z]\w*\b").unwrap());
+    let text = url.replace_all(user_text, " ");
+    file.find_iter(&text)
         .any(|m| !matches!(m.as_str().to_ascii_lowercase().as_str(), "i.e" | "e.g"))
 }
 
@@ -96,6 +105,8 @@ pub fn merge_git_changes(br: &mut BlastRadius, events: &[Event], changed: &[std:
             path,
         });
     }
+    // Same rule as analyze(): a matching touched file is scope signal.
+    br.broad_task = br.broad_task && !br.files.iter().any(|f| f.in_scope);
 }
 
 /// Loose path match for dedup: equal, or one is a suffix of the other (git paths are
