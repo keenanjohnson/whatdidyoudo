@@ -19,6 +19,10 @@ pub struct CommandRun {
     /// When the command *completed* (the result's timestamp) — what claim ordering uses.
     pub ts: Timestamp,
     pub command: String,
+    /// The shell segment that decided `kind` (`cargo test` out of `cd … && cargo test`).
+    /// Evidence strings show this so the part that mattered survives display truncation.
+    /// Falls back to the whole command when no segment decided (kind `Other`).
+    pub decisive: String,
     pub kind: CommandKind,
     pub outcome: ToolOutcome,
 }
@@ -27,16 +31,25 @@ pub struct CommandRun {
 /// only the program word of each shell segment (plus a launcher's sub-command, e.g.
 /// `cargo test`) can classify. Prose in heredoc bodies, `echo` strings, or commit
 /// messages never counts — a `git commit -m "tests pass"` is not a test run.
-pub fn classify(command: &str) -> CommandKind {
+///
+/// Also returns the segment that decided the kind, cleaned up for display; `None`
+/// when the command is `Other`.
+pub fn classify(command: &str) -> (CommandKind, Option<String>) {
     let mut kind = CommandKind::Other;
-    for segment in segments(command) {
-        match classify_segment(&segment) {
-            CommandKind::Test => return CommandKind::Test,
-            CommandKind::Build => kind = CommandKind::Build,
+    let mut decisive = None;
+    for (blanked, raw) in segments(command) {
+        match classify_segment(&blanked) {
+            CommandKind::Test => return (CommandKind::Test, Some(clean_segment(&raw))),
+            CommandKind::Build => {
+                if kind == CommandKind::Other {
+                    kind = CommandKind::Build;
+                    decisive = Some(clean_segment(&raw));
+                }
+            }
             CommandKind::Other => {}
         }
     }
-    kind
+    (kind, decisive)
 }
 
 const TEST_RUNNERS: &[&str] = &[
@@ -110,8 +123,10 @@ fn classify_segment(segment: &str) -> CommandKind {
 /// Split a command into shell segments: heredoc bodies dropped, quoted spans blanked,
 /// then split on newlines and `|`, `;`, `&` (which also covers `&&` / `||` via empty
 /// segments). Quotes are blanked first so prose inside a quoted argument can't form a
-/// segment — `git commit -m "foo | ctest"` must stay one `git` segment.
-fn segments(command: &str) -> Vec<String> {
+/// segment — `git commit -m "foo | ctest"` must stay one `git` segment. Each segment
+/// comes back as (blanked, raw): classification reads the blanked text, evidence
+/// display gets the raw text with its quotes intact.
+fn segments(command: &str) -> Vec<(String, String)> {
     let mut kept = Vec::new();
     let mut terminator: Option<&str> = None;
     for line in command.lines() {
@@ -124,15 +139,43 @@ fn segments(command: &str) -> Vec<String> {
         terminator = heredoc_terminator(line);
         kept.push(line);
     }
-    strip_quoted(&kept.join("\n"))
-        .split(['\n', '|', ';', '&'])
-        .map(str::to_string)
-        .collect()
+    let raw = kept.join("\n");
+    let blanked = strip_quoted(&raw);
+
+    // `strip_quoted` is byte-length-preserving, and every delimiter it leaves standing
+    // is outside quotes (an ASCII byte at the same offset in `raw`), so blanked spans
+    // slice `raw` at valid boundaries.
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (i, b) in blanked.bytes().enumerate() {
+        if matches!(b, b'\n' | b'|' | b';' | b'&') {
+            out.push((blanked[start..i].to_string(), raw[start..i].to_string()));
+            start = i + 1;
+        }
+    }
+    out.push((blanked[start..].to_string(), raw[start..].to_string()));
+    out
 }
 
-/// Replace single- and double-quoted spans with a space. A quote may span lines
-/// (real newlines inside a quoted commit message). Backslash escapes count only
-/// inside double quotes, matching shell rules.
+/// Tidy a raw decisive segment for display: trim, and drop a dangling redirection stub
+/// left where splitting ate the `&1` of `2>&1` (`cargo test 2>` → `cargo test`).
+fn clean_segment(raw: &str) -> String {
+    let mut s = raw.trim();
+    while let Some((rest, last)) = s.rsplit_once(char::is_whitespace) {
+        let bare = last.trim_start_matches(|c: char| c.is_ascii_digit());
+        if !bare.is_empty() && bare.chars().all(|c| c == '>') {
+            s = rest.trim_end();
+        } else {
+            break;
+        }
+    }
+    s.to_string()
+}
+
+/// Blank single- and double-quoted spans with spaces, preserving byte length so
+/// offsets map back into the input. A quote may span lines (real newlines inside a
+/// quoted commit message). Backslash escapes count only inside double quotes,
+/// matching shell rules.
 fn strip_quoted(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut quote: Option<char> = None;
@@ -146,6 +189,9 @@ fn strip_quoted(text: &str) -> String {
                     escaped = true;
                 } else if c == q {
                     quote = None;
+                }
+                for _ in 0..c.len_utf8() {
+                    out.push(' ');
                 }
             }
             None if c == '\'' || c == '"' => {
@@ -199,10 +245,12 @@ pub fn analyze(events: &[Event]) -> Vec<CommandRun> {
                 ..
             } => {
                 if let Some(cmd) = pending.get(call_id.0.as_str()) {
+                    let (kind, decisive) = classify(cmd);
                     runs.push(CommandRun {
                         ts: *ts,
                         command: cmd.to_string(),
-                        kind: classify(cmd),
+                        decisive: decisive.unwrap_or_else(|| cmd.to_string()),
+                        kind,
                         outcome: *outcome,
                     });
                 }
@@ -217,28 +265,32 @@ pub fn analyze(events: &[Event]) -> Vec<CommandRun> {
 mod tests {
     use super::*;
 
+    fn kind(command: &str) -> CommandKind {
+        classify(command).0
+    }
+
     #[test]
     fn real_test_and_build_invocations_classify() {
-        assert_eq!(classify("cargo test 2>&1 | tail -8"), CommandKind::Test);
-        assert_eq!(classify("RUST_BACKTRACE=1 cargo test"), CommandKind::Test);
-        assert_eq!(classify("npm run test:ci"), CommandKind::Test);
-        assert_eq!(classify("python -m pytest"), CommandKind::Test);
-        assert_eq!(classify("./scripts/run_tests.sh"), CommandKind::Test);
-        assert_eq!(classify("make test"), CommandKind::Test);
-        assert_eq!(classify("cargo build --release"), CommandKind::Build);
-        assert_eq!(classify("make"), CommandKind::Build);
-        assert_eq!(classify("gcc -o out main.c"), CommandKind::Build);
-        assert_eq!(classify("git status"), CommandKind::Other);
+        assert_eq!(kind("cargo test 2>&1 | tail -8"), CommandKind::Test);
+        assert_eq!(kind("RUST_BACKTRACE=1 cargo test"), CommandKind::Test);
+        assert_eq!(kind("npm run test:ci"), CommandKind::Test);
+        assert_eq!(kind("python -m pytest"), CommandKind::Test);
+        assert_eq!(kind("./scripts/run_tests.sh"), CommandKind::Test);
+        assert_eq!(kind("make test"), CommandKind::Test);
+        assert_eq!(kind("cargo build --release"), CommandKind::Build);
+        assert_eq!(kind("make"), CommandKind::Build);
+        assert_eq!(kind("gcc -o out main.c"), CommandKind::Build);
+        assert_eq!(kind("git status"), CommandKind::Other);
     }
 
     #[test]
     fn test_prose_in_commit_messages_and_echo_does_not_classify() {
         // The real-session false positive: a commit whose heredoc message mentions tests.
         let commit = "git add -A\ngit commit -q -m \"$(cat <<'EOF'\nFix parser\n\nAll tests pass after this change.\nEOF\n)\"";
-        assert_eq!(classify(commit), CommandKind::Other);
-        assert_eq!(classify("echo \"tests pass\""), CommandKind::Other);
+        assert_eq!(kind(commit), CommandKind::Other);
+        assert_eq!(kind("echo \"tests pass\""), CommandKind::Other);
         assert_eq!(
-            classify("git commit -m 'make the build green'"),
+            kind("git commit -m 'make the build green'"),
             CommandKind::Other
         );
     }
@@ -247,13 +299,10 @@ mod tests {
     fn quoted_prose_cannot_start_a_segment() {
         // A `|` inside a quoted argument is not a pipe — the words after it must not
         // classify ("ctest" would otherwise read as a test runner).
+        assert_eq!(kind("git commit -m \"foo | ctest\""), CommandKind::Other);
+        assert_eq!(kind("echo 'lint; make; test'"), CommandKind::Other);
         assert_eq!(
-            classify("git commit -m \"foo | ctest\""),
-            CommandKind::Other
-        );
-        assert_eq!(classify("echo 'lint; make; test'"), CommandKind::Other);
-        assert_eq!(
-            classify("git commit -m \"multi line | first\ntest everything works\""),
+            kind("git commit -m \"multi line | first\ntest everything works\""),
             CommandKind::Other
         );
     }
@@ -261,12 +310,36 @@ mod tests {
     #[test]
     fn a_test_segment_anywhere_in_a_compound_command_wins() {
         assert_eq!(
-            classify("echo \"===== cargo test =====\" && cargo test && cargo clippy"),
+            kind("echo \"===== cargo test =====\" && cargo test && cargo clippy"),
             CommandKind::Test
         );
         assert_eq!(
-            classify("cargo test 2>&1 | grep -E 'test result|error'"),
+            kind("cargo test 2>&1 | grep -E 'test result|error'"),
             CommandKind::Test
         );
+    }
+
+    #[test]
+    fn decisive_segment_is_the_part_that_classified() {
+        // The TODO case: a `cd &&` prefix must not hide the command that mattered.
+        assert_eq!(
+            classify("cd /Users/someone/very/long/project/path && cargo test 2>&1 | tail -8"),
+            (CommandKind::Test, Some("cargo test".into()))
+        );
+        // Quoted arguments survive in the raw segment.
+        assert_eq!(
+            classify("cargo test --features \"foo bar\" && git status"),
+            (
+                CommandKind::Test,
+                Some("cargo test --features \"foo bar\"".into())
+            )
+        );
+        // A simple command is its own decisive segment.
+        assert_eq!(
+            classify("cargo build --release"),
+            (CommandKind::Build, Some("cargo build --release".into()))
+        );
+        // `Other` has no decisive segment.
+        assert_eq!(classify("git status"), (CommandKind::Other, None));
     }
 }
