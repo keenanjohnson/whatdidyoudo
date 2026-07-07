@@ -15,10 +15,11 @@ Per CLAUDE.md, every verdict-bug fix needs a fixture in `fixtures/` + an `insta`
 
 ## 2. Output polish
 
-- [ ] **`--md` table breaks on GitHub** — evidence cells contain raw newlines, which terminate a GFM table row (pipes are escaped, newlines aren't). "PR-paste-ready" is the core M2 promise.
-- [ ] **Truncate evidence strings** — full multi-line heredocs (entire commit messages) get dumped into the table in both terminal and markdown. Truncate to first line, ~80 chars.
-- [ ] **Show the agent's quote for contradicted claims** — the extractor captures `quote` but the report drops it everywhere, including `--json`. An accusation needs to show what the agent actually said.
-- [ ] **Scope heuristic reads as hostile** — the session that legitimately built this repo scored scope 0% because no user message named the files. Loosen the heuristic or present scope neutrally when the user gave a broad task.
+- [x] **`--md` table breaks on GitHub** — fixed: `md_escape` now also strips `\r` and turns `\n` into `<br>`, so no cell content can terminate a GFM row. Regression test: `markdown_rows_survive_multiline_evidence`.
+- [x] **Truncate evidence strings** — fixed: table cells (terminal + markdown) show the first line capped at 80 chars with `…`; `--json` keeps the full string. Regression test: `evidence_is_truncated_in_tables_but_not_json`.
+- [x] **Show the agent's quote for contradicted claims** — fixed: the quote is now the *line* that triggered the claim (not the whole message), contradicted rows show `agent said: "…"` in terminal + markdown, and `--json` carries `quote` on every claim. Regression tests: `contradicted_claims_show_the_agents_words`, `quote_is_the_claim_line_not_the_whole_message`.
+- [x] **Scope heuristic reads as hostile** — fixed: when no user message names a file/path (`BlastRadius::broad_task`), scope renders as `n/a (broad task)`, per-file scope shows `—` instead of red `OUT OF SCOPE`, and `--json` emits `null` for `scope_pct`/`in_scope`. Regression tests: `broad_task_scope_is_presented_neutrally`, `task_naming_no_files_is_broad`.
+- [ ] **Evidence for compound commands truncates to the boring prefix** — `cd /Users/keen/… && cargo test` truncates to `` `cd /Users/keen/Documents/GitHub/whatdidyoudo…` ``, hiding the part that mattered. Fix: have the commands analyzer report the shell *segment* that decided the classification (`cargo test`) and use it as the evidence string in `command_verdict`. Small refactor in `commands.rs` (`classify` needs to return the decisive segment); watch out that `segments()` blanks quoted spans and splits on `&`, so the raw segment may need cleanup before display.
 
 ## 3. Infra before sharing
 

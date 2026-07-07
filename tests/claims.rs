@@ -207,6 +207,30 @@ fn abbreviation_does_not_shadow_a_real_filename() {
 }
 
 #[test]
+fn quote_is_the_claim_line_not_the_whole_message() {
+    // The report shows the quote; a multi-paragraph message must reduce to the
+    // sentence-scale line that actually triggered each claim.
+    let ev = vec![Event::AssistantText {
+        ts: Timestamp::from_unix(1).unwrap(),
+        text: "Done. Here's a summary:\n\nAll tests pass now.\n\nThe release build succeeds too."
+            .into(),
+    }];
+    let claims = claims::extract(&ev);
+    let quote_of = |kind: &ClaimKind| {
+        claims
+            .iter()
+            .find(|c| &c.kind == kind)
+            .map(|c| c.quote.clone())
+            .expect("claim present")
+    };
+    assert_eq!(quote_of(&ClaimKind::TestsPass), "All tests pass now.");
+    assert_eq!(
+        quote_of(&ClaimKind::BuildSucceeds),
+        "The release build succeeds too."
+    );
+}
+
+#[test]
 fn extracts_a_committed_claim() {
     let claims = claims::extract(&events("session_committed.jsonl"));
     assert_eq!(

@@ -28,11 +28,12 @@ pub struct AuditReport {
 }
 
 /// The one-line punchline: how many claims held up, and how much work stayed in scope.
+/// `scope_pct` is `None` when the task was broad (no files named) — no scope signal.
 pub struct TrustSummary {
     pub verified: usize,
     pub unverified: usize,
     pub contradicted: usize,
-    pub scope_pct: u8,
+    pub scope_pct: Option<u8>,
 }
 
 impl AuditReport {
@@ -85,6 +86,16 @@ impl AuditReport {
                 Verdict::Unverified(e) => ("UNVERIFIED", Color::Yellow, e.as_str()),
                 Verdict::Contradicted(e) => ("CONTRADICTED", Color::Red, e.as_str()),
             };
+            // An accusation must show what the agent actually said.
+            let evidence = if matches!(verdict, Verdict::Contradicted(_)) {
+                format!(
+                    "{}\nagent said: \"{}\"",
+                    truncate_cell(evidence),
+                    truncate_cell(&claim.quote)
+                )
+            } else {
+                truncate_cell(evidence)
+            };
             table.add_row(vec![
                 Cell::new(claim_label(&claim.kind)),
                 Cell::new(label).fg(color),
@@ -108,7 +119,11 @@ impl AuditReport {
         let mut table = Table::new();
         table.set_header(vec!["File", "Tool", "Scope"]);
         for f in &self.blast_radius.files {
-            let (label, color) = if f.in_scope {
+            // A broad task ("build the tool") names no files, so scope has no signal —
+            // stay neutral rather than flag every touch as out of scope.
+            let (label, color) = if self.blast_radius.broad_task {
+                ("—", Color::Grey)
+            } else if f.in_scope {
                 ("in scope", Color::Green)
             } else {
                 ("OUT OF SCOPE", Color::Red)
@@ -127,8 +142,11 @@ impl AuditReport {
     fn render_summary(&self) -> String {
         let s = self.trust_summary();
         let text = format!(
-            "{} verified · {} unverified · {} contradicted · scope {}%",
-            s.verified, s.unverified, s.contradicted, s.scope_pct
+            "{} verified · {} unverified · {} contradicted · {}",
+            s.verified,
+            s.unverified,
+            s.contradicted,
+            scope_label(s.scope_pct)
         );
         // Red if anything was contradicted — that's the headline failure.
         let colored = if s.contradicted > 0 {
@@ -155,6 +173,7 @@ impl AuditReport {
                     claim: claim_label(&c.kind),
                     verdict,
                     evidence,
+                    quote: &c.quote,
                     at: c.ts.to_rfc3339(),
                 }
             })
@@ -166,7 +185,8 @@ impl AuditReport {
             .map(|f| JsonFile {
                 path: &f.path,
                 tool: &f.tool,
-                in_scope: f.in_scope,
+                // null when the task named no files — no scope signal.
+                in_scope: (!self.blast_radius.broad_task).then_some(f.in_scope),
             })
             .collect();
         let dto = JsonReport {
@@ -195,8 +215,11 @@ impl AuditReport {
             self.session.path, self.session.events
         ));
         out.push_str(&format!(
-            "**{} verified · {} unverified · {} contradicted · scope {}%**\n\n",
-            s.verified, s.unverified, s.contradicted, s.scope_pct
+            "**{} verified · {} unverified · {} contradicted · {}**\n\n",
+            s.verified,
+            s.unverified,
+            s.contradicted,
+            scope_label(s.scope_pct)
         ));
 
         out.push_str("### Claims\n\n");
@@ -206,12 +229,22 @@ impl AuditReport {
             out.push_str("| Claim | Verdict | Evidence |\n|---|---|---|\n");
             for (c, v) in &self.claims {
                 let (tag, evidence) = verdict_parts(v);
+                // An accusation must show what the agent actually said.
+                let evidence = if matches!(v, Verdict::Contradicted(_)) {
+                    format!(
+                        "{}<br>agent said: \"{}\"",
+                        md_escape(&truncate_cell(evidence)),
+                        md_escape(&truncate_cell(&c.quote))
+                    )
+                } else {
+                    md_escape(&truncate_cell(evidence))
+                };
                 out.push_str(&format!(
                     "| {} | {} {} | {} |\n",
                     claim_label(&c.kind),
                     verdict_emoji(v),
                     tag,
-                    md_escape(evidence),
+                    evidence,
                 ));
             }
             out.push('\n');
@@ -221,9 +254,16 @@ impl AuditReport {
         if self.blast_radius.files.is_empty() {
             out.push_str("_no files written via Write/Edit_\n");
         } else {
+            if self.blast_radius.broad_task {
+                out.push_str(
+                    "_the task named no specific files, so per-file scope is not judged_\n\n",
+                );
+            }
             out.push_str("| File | Tool | Scope |\n|---|---|---|\n");
             for f in &self.blast_radius.files {
-                let scope = if f.in_scope {
+                let scope = if self.blast_radius.broad_task {
+                    "—"
+                } else if f.in_scope {
                     "in scope"
                 } else {
                     "**out of scope**"
@@ -261,7 +301,7 @@ struct JsonTrust {
     verified: usize,
     unverified: usize,
     contradicted: usize,
-    scope_pct: u8,
+    scope_pct: Option<u8>,
 }
 
 #[derive(Serialize)]
@@ -270,6 +310,7 @@ struct JsonClaim<'a> {
     claim: String,
     verdict: &'static str,
     evidence: &'a str,
+    quote: &'a str,
     at: String,
 }
 
@@ -277,7 +318,7 @@ struct JsonClaim<'a> {
 struct JsonFile<'a> {
     path: &'a str,
     tool: &'a str,
-    in_scope: bool,
+    in_scope: Option<bool>,
 }
 
 fn verdict_parts(v: &Verdict) -> (&'static str, &str) {
@@ -306,18 +347,45 @@ fn kind_tag(kind: &ClaimKind) -> &'static str {
     }
 }
 
-/// Escape the pipe so evidence/paths can't break a Markdown table row.
+/// Escape pipes and newlines so evidence/paths can't break a Markdown table row
+/// (a raw newline terminates a GFM row; `<br>` renders as a line break in-cell).
 fn md_escape(s: &str) -> String {
     s.replace('|', "\\|")
+        .replace('\r', "")
+        .replace('\n', "<br>")
 }
 
-/// Percent of written files that were in scope; 100% when nothing was written.
-fn scope_pct(br: &BlastRadius) -> u8 {
+/// First line only, capped at 80 chars — evidence and quotes can embed whole
+/// heredocs, and a table cell only needs enough to identify the source.
+fn truncate_cell(s: &str) -> String {
+    const MAX_CHARS: usize = 80;
+    let first = s.lines().next().unwrap_or("").trim_end();
+    let mut out: String = first.chars().take(MAX_CHARS).collect();
+    if out.len() < s.trim_end().len() {
+        out.push('…');
+    }
+    out
+}
+
+/// "scope 85%", or an explicitly neutral label when the task named no files.
+fn scope_label(pct: Option<u8>) -> String {
+    match pct {
+        Some(p) => format!("scope {p}%"),
+        None => "scope n/a (broad task)".to_string(),
+    }
+}
+
+/// Percent of written files that were in scope; 100% when nothing was written;
+/// `None` when the user named no files — the heuristic has no signal to judge with.
+fn scope_pct(br: &BlastRadius) -> Option<u8> {
     if br.files.is_empty() {
-        return 100;
+        return Some(100);
+    }
+    if br.broad_task {
+        return None;
     }
     let in_scope = br.files.iter().filter(|f| f.in_scope).count();
-    ((in_scope * 100) / br.files.len()) as u8
+    Some(((in_scope * 100) / br.files.len()) as u8)
 }
 
 /// Short canonical label naming what the agent claimed.
