@@ -22,8 +22,8 @@ pub trait Evidence {
     fn file_exists(&self, p: &Path) -> bool;
 
     /// Whether the working directory is inside a git repo. Distinguishes "can't check"
-    /// from "checked and found nothing" — a `Committed` claim in a non-repo is
-    /// Unverified, but in a repo with no matching commit it's Contradicted.
+    /// ("not a git repository") from "checked and found nothing" ("no commit found in
+    /// the session window") in `Committed` verdicts.
     fn is_git_repo(&self) -> bool {
         false
     }

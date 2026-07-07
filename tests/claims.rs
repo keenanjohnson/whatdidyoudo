@@ -37,6 +37,17 @@ impl Evidence for GitStub {
     }
 }
 
+/// Path-aware stub: a repo with a fixed set of files on disk and no commits.
+struct RepoWithFiles(Vec<&'static str>);
+impl Evidence for RepoWithFiles {
+    fn file_exists(&self, p: &Path) -> bool {
+        self.0.contains(&p.to_str().unwrap_or_default())
+    }
+    fn is_git_repo(&self) -> bool {
+        true
+    }
+}
+
 fn verdict_for(verdicts: &[(claims::Claim, Verdict)], want: &ClaimKind) -> Verdict {
     verdicts
         .iter()
@@ -88,6 +99,83 @@ fn file_creation_verifies_when_the_file_is_on_disk() {
     assert!(matches!(verdict, Verdict::Verified(_)));
 }
 
+// Regression tests for the three false verdicts caught by auditing this repo's own
+// build session (see fixtures/session_false_verdicts.jsonl).
+
+#[test]
+fn negated_committed_mention_is_not_a_claim() {
+    // "not committed yet" in the recap message must not extract; only the final
+    // message's positive "committed" does.
+    let claims = claims::extract(&events("session_false_verdicts.jsonl"));
+    let kinds: Vec<_> = claims.iter().map(|c| c.kind.clone()).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            ClaimKind::TestsPass,
+            ClaimKind::FileCreated("discovery.rs".into()),
+            ClaimKind::Committed,
+        ]
+    );
+}
+
+#[test]
+fn relative_claim_verifies_against_the_absolute_write_path() {
+    // The agent claimed "created discovery.rs"; the Write used /repo/src/discovery.rs.
+    // The disk check must follow the write's path, not the bare claimed name.
+    let ev = events("session_false_verdicts.jsonl");
+    let disk = RepoWithFiles(vec!["/repo/src/discovery.rs"]);
+    let v = claims::verify(claims::extract(&ev), &ev, &disk);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::FileCreated("discovery.rs".into())),
+        Verdict::Verified(_)
+    ));
+}
+
+#[test]
+fn commit_command_mentioning_tests_is_not_test_evidence() {
+    // The only Bash run is a `git commit` whose heredoc message says "tests pass" —
+    // that must not verify a TestsPass claim.
+    let ev = events("session_false_verdicts.jsonl");
+    let disk = RepoWithFiles(vec!["/repo/src/discovery.rs"]);
+    let v = claims::verify(claims::extract(&ev), &ev, &disk);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::TestsPass),
+        Verdict::Unverified(_)
+    ));
+}
+
+#[test]
+fn any_matching_write_on_disk_verifies_the_claim() {
+    use std::collections::BTreeMap;
+    use whatdidyoudo::ingestion::{CallId, ToolInput};
+
+    // Two writes suffix-match the claimed "discovery.rs"; only the second survives on
+    // disk. The verdict must consider every matching write, not just the first.
+    let write = |ts: i64, path: &str| Event::ToolCall {
+        ts: Timestamp::from_unix(ts).unwrap(),
+        id: CallId(format!("call{ts}")),
+        tool: "Write".into(),
+        input: ToolInput(BTreeMap::from([(
+            "file_path".to_string(),
+            path.to_string(),
+        )])),
+    };
+    let ev = vec![
+        write(1, "/repo/tests/discovery.rs"),
+        write(2, "/repo/src/discovery.rs"),
+        Event::AssistantText {
+            ts: Timestamp::from_unix(3).unwrap(),
+            text: "Created discovery.rs".into(),
+        },
+    ];
+    let disk = RepoWithFiles(vec!["/repo/src/discovery.rs"]);
+    let v = claims::verify(claims::extract(&ev), &ev, &disk);
+    assert!(matches!(
+        verdict_for(&v, &ClaimKind::FileCreated("discovery.rs".into())),
+        Verdict::Verified(_)
+    ));
+}
+
 #[test]
 fn extracts_a_committed_claim() {
     let claims = claims::extract(&events("session_committed.jsonl"));
@@ -98,7 +186,7 @@ fn extracts_a_committed_claim() {
 }
 
 #[test]
-fn committed_verifies_contradicts_or_is_unverified_by_git_state() {
+fn committed_verdict_follows_git_state() {
     let ev = events("session_committed.jsonl");
     let commit = Commit {
         hash: "a1b2c3d4ef".into(),
@@ -117,7 +205,8 @@ fn committed_verifies_contradicts_or_is_unverified_by_git_state() {
         Verdict::Verified(_)
     ));
 
-    // repo, no commits → Contradicted (a real catch)
+    // repo, no commits → Unverified, not Contradicted: the claim may recap an earlier
+    // session's commit, and log windowing can miss rebases/amends
     let repo_no_commits = GitStub {
         repo: true,
         commits: vec![],
@@ -125,7 +214,7 @@ fn committed_verifies_contradicts_or_is_unverified_by_git_state() {
     let v = claims::verify(claims::extract(&ev), &ev, &repo_no_commits);
     assert!(matches!(
         verdict_for(&v, &ClaimKind::Committed),
-        Verdict::Contradicted(_)
+        Verdict::Unverified(_)
     ));
 
     // not a repo → can't say

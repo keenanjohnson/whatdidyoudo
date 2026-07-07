@@ -8,9 +8,10 @@ Per CLAUDE.md, every verdict-bug fix needs a fixture in `fixtures/` + an `insta`
 
 ## 1. Verdict bugs (false accusations / false confirmations)
 
-- [ ] **False `CONTRADICTED: created discovery.rs`** — `file_verdict` in `src/analyzers/claims.rs` matches the session write suffix-tolerantly (`/…/src/discovery.rs` ends with `discovery.rs`) but then checks disk existence with the literal relative path, which isn't at the repo root. Fix: when a session write matched, check existence of the *matched write path*, not the raw claimed path.
-- [ ] **False `CONTRADICTED: committed`** — extractor regex `\bcommitted\b` (`src/analyzers/claims.rs`) fired on a status recap ("M0 skeleton — committed … **but not committed**") referring to a previous session. Add a negation/context guard, and/or downgrade "no commit found in window" to `Unverified` — absence of a commit isn't proof of a lie.
-- [ ] **False `VERIFIED: tests pass`** — `classify` in `src/analyzers/commands.rs` marks any command containing the substring "test" as a test run, including a `git commit` whose heredoc message mentions tests. Fix: classify only actual program invocations (first token per pipeline segment / known runners like `cargo test`, `pytest`), not echo text or commit messages.
+- [x] **False `CONTRADICTED: created discovery.rs`** — fixed: `file_verdict` now checks disk existence of the *matched write path* (often absolute), not the bare claimed name. Regression test: `relative_claim_verifies_against_the_absolute_write_path`.
+- [x] **False `CONTRADICTED: committed`** — fixed both halves: the extractor skips negated mentions ("not committed yet"), and "no commit found in window" is now `Unverified`, not `Contradicted` (the claim may recap an earlier session; log windowing can miss rebases/amends).
+- [x] **False `VERIFIED: tests pass`** — fixed: `classify` is now structural — heredoc bodies stripped, commands split into shell segments, only the program word (plus launcher sub-command like `cargo test`) classifies. Prose in `echo`/commit messages can't count as a test run.
+- [ ] **Extractor captures "i.e." as a filename** — found while re-auditing after the fixes above: `file_created_re` matched prose containing "i.e" as `FileCreated("i.e")` (harmlessly `Unverified`, but sloppy). Exclude abbreviation-shaped captures (`i.e`, `e.g`) or require a known file extension.
 
 ## 2. Output polish
 
